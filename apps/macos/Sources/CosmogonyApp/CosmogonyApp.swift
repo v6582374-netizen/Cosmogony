@@ -1,6 +1,19 @@
 import CosmogonyCore
 import SwiftUI
 
+private extension AppAppearance {
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .system:
+            nil
+        case .light:
+            .light
+        case .dark:
+            .dark
+        }
+    }
+}
+
 @main
 struct CosmogonyApp: App {
     @StateObject private var model = AppModel.bootstrap()
@@ -9,11 +22,13 @@ struct CosmogonyApp: App {
         WindowGroup("Cosmogony") {
             RootView()
                 .environmentObject(model)
+                .preferredColorScheme(model.settings.appearance.preferredColorScheme)
         }
 
         Settings {
             SettingsRootView()
                 .environmentObject(model)
+                .preferredColorScheme(model.settings.appearance.preferredColorScheme)
         }
 
         MenuBarExtra("Cosmogony", systemImage: "square.stack.3d.up.fill") {
@@ -36,6 +51,7 @@ struct CosmogonyApp: App {
                 }
             }
             .padding(12)
+            .preferredColorScheme(model.settings.appearance.preferredColorScheme)
         }
     }
 }

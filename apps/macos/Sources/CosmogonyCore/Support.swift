@@ -15,6 +15,7 @@ public enum ClipStatus: String, Codable, CaseIterable, Sendable {
 }
 
 public enum ClipScope: String, Codable, CaseIterable, Identifiable, Sendable {
+    case all
     case inbox
     case library
     case trash
@@ -23,6 +24,7 @@ public enum ClipScope: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
+        case .all: "All Clips"
         case .inbox: "Inbox"
         case .library: "Library"
         case .trash: "Trash"
@@ -259,9 +261,40 @@ public struct StorageSettings: Codable, Equatable, Sendable {
     }
 }
 
+public enum AppAppearance: String, Codable, CaseIterable, Identifiable, Sendable {
+    case system
+    case light
+    case dark
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .system:
+            "Follow System"
+        case .light:
+            "Light"
+        case .dark:
+            "Dark"
+        }
+    }
+
+    public var description: String {
+        switch self {
+        case .system:
+            "让应用跟随 macOS 当前外观。"
+        case .light:
+            "固定使用浅色界面。"
+        case .dark:
+            "固定使用深色界面。"
+        }
+    }
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public var defaultReasoningProfileID: String?
     public var defaultEmbeddingProfileID: String?
+    public var appearance: AppAppearance = .system
     public var shortcuts = ShortcutSettings()
     public var capture = CaptureSettings()
     public var storage = StorageSettings()
@@ -270,6 +303,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public init(
         defaultReasoningProfileID: String? = nil,
         defaultEmbeddingProfileID: String? = nil,
+        appearance: AppAppearance = .system,
         shortcuts: ShortcutSettings = ShortcutSettings(),
         capture: CaptureSettings = CaptureSettings(),
         storage: StorageSettings = StorageSettings(),
@@ -277,6 +311,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     ) {
         self.defaultReasoningProfileID = defaultReasoningProfileID
         self.defaultEmbeddingProfileID = defaultEmbeddingProfileID
+        self.appearance = appearance
         self.shortcuts = shortcuts
         self.capture = capture
         self.storage = storage
@@ -566,6 +601,16 @@ public struct TimeboxDraft: Equatable, Sendable {
         self.day = day
         self.rangeStart = rangeStart
         self.rangeEnd = rangeEnd
+    }
+
+    public static func today(now: Date = .now) -> TimeboxDraft {
+        TimeboxDraft(
+            mode: .day,
+            trailingHours: 24,
+            day: now,
+            rangeStart: Calendar.current.date(byAdding: .hour, value: -24, to: now) ?? now,
+            rangeEnd: now
+        )
     }
 
     public var filter: TimeboxFilter {

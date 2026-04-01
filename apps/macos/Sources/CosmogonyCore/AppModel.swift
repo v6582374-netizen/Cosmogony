@@ -8,9 +8,9 @@ public final class AppModel: ObservableObject {
     @Published public var providerSecrets: [String: String]
     @Published public var categoryRules: [CategoryRule]
     @Published public var clips: [ClipItem] = []
-    @Published public var selectedScope: ClipScope = .library
+    @Published public var selectedScope: ClipScope = .all
     @Published public var selectedPlatform: PlatformFilter = .all
-    @Published public var timeboxDraft = TimeboxDraft()
+    @Published public var timeboxDraft = TimeboxDraft.today()
     @Published public var searchText = ""
     @Published public var selectedClipID: String?
     @Published public var statusMessage = "Ready."
@@ -94,6 +94,14 @@ public final class AppModel: ObservableObject {
         } catch {
             statusMessage = error.localizedDescription
         }
+    }
+
+    public func resetPrimaryFilters() {
+        selectedScope = .all
+        selectedPlatform = .all
+        searchText = ""
+        timeboxDraft = .today()
+        refreshFilters()
     }
 
     public func captureCurrentPage() {
@@ -374,6 +382,12 @@ public final class AppModel: ObservableObject {
     public func updateCaptureSettings(_ capture: CaptureSettings) {
         settings.capture = capture
         saveSettingsOnly()
+    }
+
+    public func updateAppearance(_ appearance: AppAppearance) {
+        settings.appearance = appearance
+        saveSettingsOnly()
+        statusMessage = "Appearance updated."
     }
 
     public func updateOpenAtLogin(_ enabled: Bool) {

@@ -2,15 +2,29 @@ import AppKit
 import SwiftUI
 
 private enum CosmoPalette {
-    static let canvasTop = Color(red: 0.97, green: 0.95, blue: 0.90)
-    static let canvasBottom = Color(red: 0.89, green: 0.92, blue: 0.88)
-    static let fog = Color(red: 0.98, green: 0.97, blue: 0.94)
-    static let ink = Color(red: 0.16, green: 0.18, blue: 0.16)
-    static let moss = Color(red: 0.36, green: 0.47, blue: 0.40)
-    static let clay = Color(red: 0.74, green: 0.59, blue: 0.49)
-    static let gold = Color(red: 0.83, green: 0.72, blue: 0.48)
-    static let line = Color.white.opacity(0.52)
-    static let shadow = Color.black.opacity(0.08)
+    static let canvasTop = adaptiveColor(light: NSColor(red: 0.97, green: 0.95, blue: 0.90, alpha: 1), dark: NSColor(red: 0.10, green: 0.11, blue: 0.12, alpha: 1))
+    static let canvasBottom = adaptiveColor(light: NSColor(red: 0.89, green: 0.92, blue: 0.88, alpha: 1), dark: NSColor(red: 0.13, green: 0.15, blue: 0.16, alpha: 1))
+    static let fog = adaptiveColor(light: NSColor(red: 0.98, green: 0.97, blue: 0.94, alpha: 1), dark: NSColor(red: 0.16, green: 0.18, blue: 0.20, alpha: 1))
+    static let ink = adaptiveColor(light: NSColor(red: 0.16, green: 0.18, blue: 0.16, alpha: 1), dark: NSColor(red: 0.93, green: 0.94, blue: 0.92, alpha: 1))
+    static let textSecondary = adaptiveColor(light: NSColor(red: 0.37, green: 0.40, blue: 0.37, alpha: 1), dark: NSColor(red: 0.72, green: 0.76, blue: 0.73, alpha: 1))
+    static let moss = adaptiveColor(light: NSColor(red: 0.36, green: 0.47, blue: 0.40, alpha: 1), dark: NSColor(red: 0.61, green: 0.77, blue: 0.67, alpha: 1))
+    static let clay = adaptiveColor(light: NSColor(red: 0.74, green: 0.59, blue: 0.49, alpha: 1), dark: NSColor(red: 0.80, green: 0.65, blue: 0.54, alpha: 1))
+    static let gold = adaptiveColor(light: NSColor(red: 0.83, green: 0.72, blue: 0.48, alpha: 1), dark: NSColor(red: 0.83, green: 0.74, blue: 0.52, alpha: 1))
+    static let surface = adaptiveColor(light: NSColor(white: 1.0, alpha: 0.70), dark: NSColor(red: 0.18, green: 0.20, blue: 0.22, alpha: 0.92))
+    static let surfaceStrong = adaptiveColor(light: NSColor(white: 1.0, alpha: 0.88), dark: NSColor(red: 0.22, green: 0.24, blue: 0.27, alpha: 0.97))
+    static let surfaceSoft = adaptiveColor(light: NSColor(white: 1.0, alpha: 0.62), dark: NSColor(red: 0.16, green: 0.18, blue: 0.20, alpha: 0.94))
+    static let line = adaptiveColor(light: NSColor(white: 1.0, alpha: 0.52), dark: NSColor(white: 1.0, alpha: 0.10))
+    static let shadow = adaptiveColor(light: NSColor(white: 0.0, alpha: 0.08), dark: NSColor(white: 0.0, alpha: 0.35))
+    static let chipSelectedText = adaptiveColor(light: .white, dark: NSColor(red: 0.93, green: 0.94, blue: 0.92, alpha: 1))
+    static let chipSelectedFill = adaptiveColor(light: NSColor(red: 0.16, green: 0.18, blue: 0.16, alpha: 0.94), dark: NSColor(red: 0.28, green: 0.32, blue: 0.35, alpha: 0.98))
+    static let chipSelectedStroke = adaptiveColor(light: NSColor(white: 1.0, alpha: 0.16), dark: NSColor(white: 1.0, alpha: 0.14))
+}
+
+private func adaptiveColor(light: NSColor, dark: NSColor) -> Color {
+    Color(nsColor: NSColor(name: nil) { appearance in
+        let best = appearance.bestMatch(from: [.darkAqua, .aqua])
+        return best == .darkAqua ? dark : light
+    })
 }
 
 struct CardSurface<Content: View>: View {
@@ -26,7 +40,7 @@ struct CardSurface<Content: View>: View {
                         LinearGradient(
                             colors: [
                                 CosmoPalette.fog.opacity(0.90),
-                                Color.white.opacity(0.66)
+                                CosmoPalette.surface
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -99,7 +113,7 @@ private struct ClipCardButtonStyle: ButtonStyle {
         configuration.label
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(selected ? Color.white.opacity(0.88) : Color.white.opacity(0.62))
+                    .fill(selected ? CosmoPalette.surfaceStrong : CosmoPalette.surfaceSoft)
                     .overlay(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
                             .strokeBorder(selected ? CosmoPalette.moss.opacity(0.55) : CosmoPalette.line, lineWidth: 1)
@@ -116,13 +130,13 @@ private struct FilterChipStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(selected ? Color.white : CosmoPalette.ink)
+            .foregroundStyle(selected ? CosmoPalette.chipSelectedText : CosmoPalette.ink)
             .background(
                 Capsule(style: .continuous)
-                    .fill(selected ? CosmoPalette.ink.opacity(0.94) : Color.white.opacity(0.70))
+                    .fill(selected ? CosmoPalette.chipSelectedFill : CosmoPalette.surface)
                     .overlay(
                         Capsule(style: .continuous)
-                            .strokeBorder(selected ? Color.white.opacity(0.16) : CosmoPalette.line, lineWidth: 1)
+                            .strokeBorder(selected ? CosmoPalette.chipSelectedStroke : CosmoPalette.line, lineWidth: 1)
                     )
             )
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
@@ -136,15 +150,16 @@ private struct SearchField: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(CosmoPalette.textSecondary)
             TextField("Search title, domain, tags, notes…", text: $text)
                 .textFieldStyle(.plain)
+                .foregroundStyle(CosmoPalette.ink)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.74))
+                .fill(CosmoPalette.surfaceStrong)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .strokeBorder(CosmoPalette.line, lineWidth: 1)
@@ -161,7 +176,7 @@ private struct InfoBadge: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(CosmoPalette.textSecondary)
             Text(value)
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(CosmoPalette.ink)
@@ -170,7 +185,7 @@ private struct InfoBadge: View {
         .padding(.vertical, 10)
         .background(
             Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.64))
+                .fill(CosmoPalette.surfaceSoft)
                 .overlay(
                     Capsule(style: .continuous)
                         .strokeBorder(CosmoPalette.line, lineWidth: 1)
@@ -197,7 +212,7 @@ private struct PlatformShelfCard: View {
                             .foregroundStyle(CosmoPalette.ink)
                         Text("精选样例与最新命中会在这里形成一个更安静、更易扫读的内容分区。")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(CosmoPalette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -253,7 +268,7 @@ private struct PlatformShelfCard: View {
                                             Spacer(minLength: 10)
                                             Text(clip.capturedAt.formatted(date: .omitted, time: .shortened))
                                                 .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                                .foregroundStyle(CosmoPalette.textSecondary)
                                         }
 
                                         Text(clip.domain)
@@ -262,7 +277,7 @@ private struct PlatformShelfCard: View {
 
                                         Text(clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary)
                                             .font(.subheadline)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(CosmoPalette.textSecondary)
                                             .lineLimit(2)
                                     }
                                 }
@@ -340,7 +355,7 @@ private struct ClipCanvasCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(clip.platformBucket.title)
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(CosmoPalette.textSecondary)
                     Text(clip.title)
                         .font(.system(size: 19, weight: .semibold, design: .serif))
                         .foregroundStyle(CosmoPalette.ink)
@@ -349,12 +364,12 @@ private struct ClipCanvasCard: View {
                 Spacer()
                 Text(clip.capturedAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(CosmoPalette.textSecondary)
             }
 
             Text(clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(CosmoPalette.textSecondary)
                 .lineLimit(4)
 
             HStack(spacing: 8) {
@@ -376,7 +391,7 @@ private struct ClipCanvasCard: View {
             if !clip.tags.isEmpty {
                 Text(clip.tags.prefix(3).joined(separator: " · "))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(CosmoPalette.textSecondary)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 210, alignment: .topLeading)
@@ -446,7 +461,7 @@ public struct RootView: View {
                         .foregroundStyle(CosmoPalette.ink)
                     Text("把链接、灵感和稍纵即逝的信息收拢成一块更安静的思绪画布。")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(CosmoPalette.textSecondary)
                     HStack(spacing: 10) {
                         InfoBadge(title: "Bridge", value: model.bridgeStatus)
                         InfoBadge(title: "Status", value: model.statusMessage)
@@ -463,7 +478,7 @@ public struct RootView: View {
                                 .padding(.vertical, 12)
                                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-                        .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.70)))
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
 
                         Button {
                             model.captureClipboard()
@@ -473,7 +488,7 @@ public struct RootView: View {
                                 .padding(.vertical, 12)
                                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-                        .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.70)))
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
 
                         Button {
                             model.captureCurrentPage()
@@ -483,12 +498,12 @@ public struct RootView: View {
                                 .padding(.vertical, 12)
                                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.ink.opacity(0.92), foreground: .white, border: Color.white.opacity(0.10)))
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
                     }
 
                     Text("灵感不再淹没在表格里，而是先以平台分区展示，再进入深度检索。")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(CosmoPalette.textSecondary)
                 }
             }
         }
@@ -517,6 +532,7 @@ public struct RootView: View {
                             Capsule(style: .continuous)
                                 .fill(CosmoPalette.gold.opacity(0.18))
                         )
+                        .foregroundStyle(CosmoPalette.ink)
 
                     TimeboxComposer(draft: $model.timeboxDraft)
 
@@ -532,7 +548,7 @@ public struct RootView: View {
                             .padding(.vertical, 11)
                             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                    .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.64)))
+                    .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surfaceSoft))
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -561,7 +577,7 @@ public struct RootView: View {
                                         .padding(.vertical, 3)
                                         .background(
                                             Capsule(style: .continuous)
-                                                .fill(filter == model.selectedPlatform ? Color.white.opacity(0.16) : CosmoPalette.gold.opacity(0.18))
+                                                .fill(filter == model.selectedPlatform ? CosmoPalette.chipSelectedStroke : CosmoPalette.gold.opacity(0.18))
                                         )
                                 }
                                 .padding(.horizontal, 16)
@@ -598,7 +614,7 @@ public struct RootView: View {
                             .foregroundStyle(CosmoPalette.ink)
                         Text("每个平台先展示 3 个精选页面，下面再承接当前筛选命中的完整结果。")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(CosmoPalette.textSecondary)
                     }
 
                     LazyVGrid(columns: shelfColumns, alignment: .leading, spacing: 18) {
@@ -623,7 +639,7 @@ public struct RootView: View {
                             .foregroundStyle(CosmoPalette.ink)
                         Text("当前检索、时间范围和平台筛选命中的所有内容都会以卡片形式呈现。")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(CosmoPalette.textSecondary)
                     }
 
                     if model.clips.isEmpty {
@@ -684,7 +700,7 @@ struct TimeboxComposer: View {
             switch draft.mode {
             case .all:
                 Text("All time")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(CosmoPalette.textSecondary)
             case .trailingHours:
                 Stepper("\(draft.trailingHours)h", value: $draft.trailingHours, in: 1...720)
             case .day:
@@ -699,7 +715,7 @@ struct TimeboxComposer: View {
         .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.62))
+                .fill(CosmoPalette.surfaceSoft)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .strokeBorder(CosmoPalette.line, lineWidth: 1)
@@ -726,13 +742,13 @@ struct ClipInspectorView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(clip.platformBucket.title)
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(CosmoPalette.textSecondary)
                             Text(clip.title)
                                 .font(.system(size: 28, weight: .semibold, design: .serif))
                                 .foregroundStyle(CosmoPalette.ink)
                             Text(clip.url)
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(CosmoPalette.textSecondary)
                                 .textSelection(.enabled)
                         }
 
@@ -749,7 +765,7 @@ struct ClipInspectorView: View {
                                 .padding(8)
                                 .background(
                                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .fill(Color.white.opacity(0.60))
+                                        .fill(CosmoPalette.surfaceSoft)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 18, style: .continuous)
                                                 .strokeBorder(CosmoPalette.line, lineWidth: 1)
@@ -767,7 +783,7 @@ struct ClipInspectorView: View {
                                     .padding(.vertical, 11)
                                     .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             }
-                            .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.70)))
+                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
                             .disabled(clip.url.hasPrefix("clipboard://"))
 
                             Button {
@@ -778,7 +794,7 @@ struct ClipInspectorView: View {
                                     .padding(.vertical, 11)
                                     .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             }
-                            .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.70)))
+                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
                         }
 
                         VStack(alignment: .leading, spacing: 8) {
@@ -803,7 +819,7 @@ struct ClipInspectorView: View {
                                 .padding(8)
                                 .background(
                                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .fill(Color.white.opacity(0.62))
+                                        .fill(CosmoPalette.surfaceSoft)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 18, style: .continuous)
                                                 .strokeBorder(CosmoPalette.line, lineWidth: 1)
@@ -834,7 +850,7 @@ struct ClipInspectorView: View {
                                 .frame(maxWidth: .infinity)
                                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.ink.opacity(0.92), foreground: .white, border: Color.white.opacity(0.10)))
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
                     }
                 }
                 .onAppear {
@@ -869,7 +885,7 @@ struct CategoryRulesStudio: View {
                     Text("Category Rules")
                         .font(.system(size: 24, weight: .semibold, design: .serif))
                     Text("把人工维护的别名规则作为 AI 分类前的一层稳定语义约束。")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(CosmoPalette.textSecondary)
                 }
                 Spacer()
                 Button("Import Legacy JSON") {
@@ -899,7 +915,7 @@ struct CategoryRulesStudio: View {
                                 .font(.headline)
                             Text(rule.aliases.joined(separator: ", "))
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(CosmoPalette.textSecondary)
                         }
                         Spacer()
                         Button("Delete", role: .destructive) {
@@ -919,6 +935,8 @@ public struct SettingsRootView: View {
 
     public var body: some View {
         TabView {
+            AppearanceSettingsView()
+                .tabItem { Label("Appearance", systemImage: "circle.lefthalf.filled") }
             ProvidersSettingsView()
                 .tabItem { Label("Providers", systemImage: "brain.head.profile") }
             ShortcutSettingsView()
@@ -933,6 +951,49 @@ public struct SettingsRootView: View {
     }
 }
 
+struct AppearanceSettingsView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Appearance")
+                .font(.title2.weight(.semibold))
+            Text("选择 Cosmogony 使用浅色、深色，或跟随系统外观。")
+                .foregroundStyle(CosmoPalette.textSecondary)
+
+            CardSurface {
+                VStack(alignment: .leading, spacing: 16) {
+                    Picker("Appearance", selection: Binding(
+                        get: { model.settings.appearance },
+                        set: { model.updateAppearance($0) }
+                    )) {
+                        ForEach(AppAppearance.allCases) { appearance in
+                            Text(appearance.title).tag(appearance)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    ForEach(AppAppearance.allCases) { appearance in
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: model.settings.appearance == appearance ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(model.settings.appearance == appearance ? CosmoPalette.moss : CosmoPalette.textSecondary)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(appearance.title)
+                                    .font(.headline)
+                                    .foregroundStyle(CosmoPalette.ink)
+                                Text(appearance.description)
+                                    .foregroundStyle(CosmoPalette.textSecondary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer()
+        }
+    }
+}
+
 struct ProvidersSettingsView: View {
     @EnvironmentObject private var model: AppModel
 
@@ -944,7 +1005,7 @@ struct ProvidersSettingsView: View {
                         Text("Provider Profiles")
                             .font(.title2.weight(.semibold))
                         Text("API keys are stored in Keychain; non-sensitive profile settings stay local.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(CosmoPalette.textSecondary)
                     }
                     Spacer()
                     Button("Add Provider") {
@@ -993,7 +1054,8 @@ struct ProviderEditorCard: View {
                         .font(.caption)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(Capsule().fill(Color.black.opacity(0.08)))
+                        .background(Capsule().fill(CosmoPalette.surfaceSoft))
+                        .foregroundStyle(CosmoPalette.ink)
                     Text(profile.displayName)
                         .font(.headline)
                     Spacer()
@@ -1072,7 +1134,7 @@ struct ShortcutSettingsView: View {
             Text("Global Shortcuts")
                 .font(.title2.weight(.semibold))
             Text("Record the shortcut you want, then save. Conflicts are blocked before Carbon rebinds the keys.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(CosmoPalette.textSecondary)
 
             if let conflict = model.shortcutConflict {
                 Text(conflict)
@@ -1189,7 +1251,7 @@ struct StorageSettingsView: View {
                     ))
                     Text(model.database.databaseURL.path)
                         .font(.footnote.monospaced())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(CosmoPalette.textSecondary)
                 }
             }
             .frame(height: 120)
@@ -1219,7 +1281,7 @@ struct StatPill: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(CosmoPalette.textSecondary)
             Text(value)
                 .font(.headline)
                 .foregroundStyle(CosmoPalette.ink)
@@ -1228,7 +1290,7 @@ struct StatPill: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.68))
+                .fill(CosmoPalette.surface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .strokeBorder(CosmoPalette.line, lineWidth: 1)
