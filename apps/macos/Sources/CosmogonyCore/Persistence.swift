@@ -140,6 +140,16 @@ final class AppDatabase {
                 table.add(column: "space_name", .text).notNull().defaults(to: "")
             }
         }
+        migrator.registerMigration("v3_clip_flags") { db in
+            try db.alter(table: "clip_items") { table in
+                table.add(column: "is_pinned", .boolean).notNull().defaults(to: false)
+                table.add(column: "trashed_at", .double)
+            }
+            try db.execute(
+                sql: "UPDATE clip_items SET trashed_at = captured_at WHERE status = ? AND trashed_at IS NULL",
+                arguments: [ClipStatus.trashed.rawValue]
+            )
+        }
         return migrator
     }
 
@@ -271,9 +281,24 @@ final class AppDatabase {
         }
     }
 
+    func deleteClip(id: String) throws {
+        try dbQueue.write { db in
+            _ = try ClipItem.deleteOne(db, key: id)
+        }
+    }
+
     func fetchClip(id: String) throws -> ClipItem? {
         try dbQueue.read { db in
             try ClipItem.fetchOne(db, key: id)
+        }
+    }
+
+    func fetchClip(url: String) throws -> ClipItem? {
+        try dbQueue.read { db in
+            try ClipItem
+                .filter(Column("url") == url)
+                .order(Column("captured_at").desc)
+                .fetchOne(db)
         }
     }
 
@@ -325,7 +350,7 @@ final class AppDatabase {
 
             let trimmedQuery = search.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmedQuery.isEmpty {
-                return clips.sorted { $0.capturedAt > $1.capturedAt }
+                return clips.sorted(by: clipSort)
             }
 
             let scored = clips
@@ -333,12 +358,22 @@ final class AppDatabase {
                 .filter { _, score in score > 0 || mode == .embeddingReady }
                 .sorted {
                     if $0.1 == $1.1 {
-                        return $0.0.capturedAt > $1.0.capturedAt
+                        return clipSort($0.0, $1.0)
                     }
                     return $0.1 > $1.1
                 }
 
             return scored.map(\.0)
+        }
+    }
+
+    func cleanupExpiredTrash(retentionDays: Int = 30, now: Date = .now) throws {
+        let cutoff = now.addingTimeInterval(TimeInterval(-86_400 * retentionDays))
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM clip_items WHERE status = ? AND trashed_at IS NOT NULL AND trashed_at < ?",
+                arguments: [ClipStatus.trashed.rawValue, cutoff.timeIntervalSince1970]
+            )
         }
     }
 
@@ -417,7 +452,8 @@ final class AppDatabase {
                 category: legacy.category ?? "",
                 tags: legacy.tags ?? [],
                 note: legacy.userNote ?? "",
-                status: mapLegacyStatus(legacy.status)
+                status: mapLegacyStatus(legacy.status),
+                trashedAt: mapLegacyStatus(legacy.status) == .trashed ? capturedAt : nil
             )
             clip.refreshSearchText()
             try saveClip(clip)
@@ -444,6 +480,13 @@ final class AppDatabase {
             .inbox
         }
     }
+}
+
+private func clipSort(_ lhs: ClipItem, _ rhs: ClipItem) -> Bool {
+    if lhs.isPinned != rhs.isPinned {
+        return lhs.isPinned && !rhs.isPinned
+    }
+    return lhs.capturedAt > rhs.capturedAt
 }
 
 final class KeychainStore {

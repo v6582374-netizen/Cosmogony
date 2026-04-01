@@ -1,6 +1,29 @@
 import AppKit
 import Foundation
 
+public struct DuplicateCapturePrompt: Identifiable {
+    public let id = UUID()
+    public let clip: ClipItem
+    public let successMessage: String
+    public let shouldEnrich: Bool
+    public let enrichmentURL: String?
+    public let existingClipTitle: String
+
+    public init(
+        clip: ClipItem,
+        successMessage: String,
+        shouldEnrich: Bool,
+        enrichmentURL: String?,
+        existingClipTitle: String
+    ) {
+        self.clip = clip
+        self.successMessage = successMessage
+        self.shouldEnrich = shouldEnrich
+        self.enrichmentURL = enrichmentURL
+        self.existingClipTitle = existingClipTitle
+    }
+}
+
 @MainActor
 public final class AppModel: ObservableObject {
     @Published public var settings: AppSettings
@@ -25,6 +48,9 @@ public final class AppModel: ObservableObject {
     @Published public var selectedSettingsTab: SettingsTab = .appearance
     @Published public var activeOverlay: AppOverlay?
     @Published public var summaryGenerationRunning = Set<String>()
+    @Published public var duplicateCapturePrompt: DuplicateCapturePrompt?
+    @Published public var clipEditorHasUnsavedChanges = false
+    @Published public var showUnsavedClipClosePrompt = false
 
     let database: AppDatabase
     private let keychain = KeychainStore()
@@ -63,13 +89,17 @@ public final class AppModel: ObservableObject {
         rebindHotKeys()
         try bridge.start()
         bridgeStatus = "Bridge listening on 127.0.0.1:\(bridge.port)"
+        try database.cleanupExpiredTrash()
         try reloadClips()
         try reloadStats()
     }
 
     public var selectedClip: ClipItem? {
         guard let selectedClipID else { return nil }
-        return clips.first(where: { $0.id == selectedClipID })
+        if let inMemory = clips.first(where: { $0.id == selectedClipID }) {
+            return inMemory
+        }
+        return try? database.fetchClip(id: selectedClipID)
     }
 
     public var searchMode: SearchMode {
@@ -77,6 +107,7 @@ public final class AppModel: ObservableObject {
     }
 
     public func reloadClips() throws {
+        try database.cleanupExpiredTrash()
         clips = try database.fetchClips(
             scope: selectedScope,
             platformFilter: selectedPlatform,
@@ -124,12 +155,29 @@ public final class AppModel: ObservableObject {
 
     public func presentClipDetail(_ clip: ClipItem) {
         selectedClipID = clip.id
+        clipEditorHasUnsavedChanges = false
         activeOverlay = .clipDetail
         refreshAISummary(for: clip.id)
     }
 
     public func closeOverlay() {
         activeOverlay = nil
+        clipEditorHasUnsavedChanges = false
+        showUnsavedClipClosePrompt = false
+    }
+
+    public func requestCloseOverlay() {
+        if activeOverlay == .clipDetail, clipEditorHasUnsavedChanges {
+            showUnsavedClipClosePrompt = true
+            return
+        }
+        closeOverlay()
+    }
+
+    public func discardUnsavedClipChangesAndClose() {
+        clipEditorHasUnsavedChanges = false
+        showUnsavedClipClosePrompt = false
+        closeOverlay()
     }
 
     public func clearSearch() {
@@ -190,8 +238,7 @@ public final class AppModel: ObservableObject {
             status: .inbox
         )
         clip.refreshSearchText()
-        persist(clip)
-        statusMessage = "Captured clipboard content."
+        queueOrPersistCapture(clip, successMessage: "Captured clipboard content.")
     }
 
     private func ingestCurrentPage(url: String, title: String, browserName: String, excerpt: String, content: String) {
@@ -222,16 +269,13 @@ public final class AppModel: ObservableObject {
             status: .inbox
         )
         clip.refreshSearchText()
-        persist(clip)
-        statusMessage = "Captured \(title)."
-
-        guard settings.capture.enrichPublicPages, content.isEmpty else { return }
-        Task {
-            let enrichment = await enricher.enrich(from: url, maxLength: settings.capture.maxStoredCharacters)
-            await MainActor.run {
-                self.applyEnrichment(for: clip.id, excerpt: enrichment.excerpt, content: enrichment.content)
-            }
-        }
+        let shouldEnrich = settings.capture.enrichPublicPages && content.isEmpty
+        queueOrPersistCapture(
+            clip,
+            successMessage: "Captured \(title).",
+            shouldEnrich: shouldEnrich,
+            enrichmentURL: shouldEnrich ? url : nil
+        )
     }
 
     private func applyEnrichment(for id: String, excerpt: String, content: String) {
@@ -264,8 +308,72 @@ public final class AppModel: ObservableObject {
         }
     }
 
+    private func queueOrPersistCapture(
+        _ clip: ClipItem,
+        successMessage: String,
+        shouldEnrich: Bool = false,
+        enrichmentURL: String? = nil
+    ) {
+        if shouldPromptForDuplicate(url: clip.url),
+           let existing = try? database.fetchClip(url: clip.url) {
+            duplicateCapturePrompt = DuplicateCapturePrompt(
+                clip: clip,
+                successMessage: successMessage,
+                shouldEnrich: shouldEnrich,
+                enrichmentURL: enrichmentURL,
+                existingClipTitle: existing.title.isEmpty ? existing.url : existing.title
+            )
+            statusMessage = "Duplicate link detected."
+            return
+        }
+
+        persistCapturedClip(clip, successMessage: successMessage, shouldEnrich: shouldEnrich, enrichmentURL: enrichmentURL)
+    }
+
+    private func persistCapturedClip(
+        _ clip: ClipItem,
+        successMessage: String,
+        shouldEnrich: Bool,
+        enrichmentURL: String?
+    ) {
+        persist(clip)
+        statusMessage = successMessage
+
+        guard shouldEnrich, let enrichmentURL else { return }
+        Task {
+            let enrichment = await enricher.enrich(from: enrichmentURL, maxLength: settings.capture.maxStoredCharacters)
+            await MainActor.run {
+                self.applyEnrichment(for: clip.id, excerpt: enrichment.excerpt, content: enrichment.content)
+            }
+        }
+    }
+
+    private func shouldPromptForDuplicate(url: String) -> Bool {
+        guard let parsedURL = URL(string: url), let scheme = parsedURL.scheme?.lowercased() else {
+            return false
+        }
+        return scheme == "http" || scheme == "https"
+    }
+
+    public func confirmDuplicateCapture() {
+        guard let prompt = duplicateCapturePrompt else { return }
+        duplicateCapturePrompt = nil
+        persistCapturedClip(
+            prompt.clip,
+            successMessage: prompt.successMessage,
+            shouldEnrich: prompt.shouldEnrich,
+            enrichmentURL: prompt.enrichmentURL
+        )
+    }
+
+    public func cancelDuplicateCapture() {
+        duplicateCapturePrompt = nil
+        statusMessage = "Capture cancelled."
+    }
+
     public func saveClipEdits(
         id: String,
+        aiSummary: String,
         category: String,
         tagsText: String,
         note: String,
@@ -273,6 +381,8 @@ public final class AppModel: ObservableObject {
     ) {
         do {
             guard var clip = try database.fetchClip(id: id) else { return }
+            let previousStatus = clip.status
+            clip.aiSummary = aiSummary.trimmingCharacters(in: .whitespacesAndNewlines)
             clip.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
             clip.tags = tagsText
                 .split(separator: ",")
@@ -283,10 +393,17 @@ public final class AppModel: ObservableObject {
             clip.spaceName = assignedSpace?.name ?? ""
             clip.note = note
             clip.status = status
+            if status == .trashed {
+                clip.trashedAt = previousStatus == .trashed ? clip.trashedAt ?? .now : .now
+            } else {
+                clip.trashedAt = nil
+            }
             clip.refreshSearchText()
             try database.saveClip(clip)
             try reloadClips()
             try reloadStats()
+            selectedClipID = clip.id
+            clipEditorHasUnsavedChanges = false
             statusMessage = "Clip updated."
         } catch {
             statusMessage = error.localizedDescription
@@ -603,11 +720,74 @@ public final class AppModel: ObservableObject {
         guard let clip = selectedClip else { return }
         saveClipEdits(
             id: clip.id,
+            aiSummary: clip.aiSummary,
             category: clip.category,
             tagsText: clip.tags.joined(separator: ", "),
             note: clip.note,
             status: status
         )
+    }
+
+    public func syncClipEditorDirtyState(
+        clipID: String,
+        aiSummary: String,
+        category: String,
+        tagsText: String,
+        note: String,
+        status: ClipStatus
+    ) {
+        guard let clip = try? database.fetchClip(id: clipID) else {
+            clipEditorHasUnsavedChanges = false
+            return
+        }
+
+        let normalizedTags = tagsText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        clipEditorHasUnsavedChanges =
+            clip.aiSummary.trimmingCharacters(in: .whitespacesAndNewlines) != aiSummary.trimmingCharacters(in: .whitespacesAndNewlines) ||
+            clip.category.trimmingCharacters(in: .whitespacesAndNewlines) != category.trimmingCharacters(in: .whitespacesAndNewlines) ||
+            clip.tags != normalizedTags ||
+            clip.note != note ||
+            clip.status != status
+    }
+
+    public func togglePin(for clip: ClipItem) {
+        do {
+            guard var stored = try database.fetchClip(id: clip.id) else { return }
+            stored.isPinned.toggle()
+            try database.saveClip(stored)
+            try reloadClips()
+            try reloadStats()
+            selectedClipID = stored.id
+            statusMessage = stored.isPinned ? "Clip pinned." : "Clip unpinned."
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    public func deleteOrTrash(_ clip: ClipItem) {
+        do {
+            guard var stored = try database.fetchClip(id: clip.id) else { return }
+            if stored.status == .trashed {
+                try database.deleteClip(id: stored.id)
+                try reloadClips()
+                try reloadStats()
+                statusMessage = "Clip deleted permanently."
+                return
+            }
+
+            stored.status = .trashed
+            stored.trashedAt = .now
+            try database.saveClip(stored)
+            try reloadClips()
+            try reloadStats()
+            statusMessage = "Clip moved to trash."
+        } catch {
+            statusMessage = error.localizedDescription
+        }
     }
 
     public func refreshAISummary(for id: String) {

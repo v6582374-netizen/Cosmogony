@@ -9,6 +9,8 @@ struct CosmogonyChecks {
             try verifyTimebox()
             try verifyProviders()
             try verifyShortcuts()
+            try verifyChineseTextDetection()
+            try verifySiteIconResolver()
             print("CosmogonyChecks: all checks passed.")
         } catch {
             fputs("CosmogonyChecks failed: \(error)\n", stderr)
@@ -52,6 +54,17 @@ struct CosmogonyChecks {
             captureClipboard: .captureCurrentPageDefault
         )
         try assert(conflict.conflictMessage() != nil, "Duplicate shortcuts must be rejected")
+    }
+
+    private static func verifyChineseTextDetection() throws {
+        try assert(CosmoTextClassifier.containsChinese("中文标题"), "Chinese text should be detected")
+        try assert(!CosmoTextClassifier.containsChinese("Cosmogony Search"), "ASCII-only text should not be detected as Chinese")
+    }
+
+    private static func verifySiteIconResolver() throws {
+        try assert(SiteIconResolver.normalizedHost(from: "https://www.Example.com/path?q=1") == "example.com", "Hosts should be normalized and lowercase without www")
+        try assert(SiteIconResolver.normalizedHost(from: "clipboard://local") == nil, "Non-web URLs should not produce a host")
+        try assert(SiteIconResolver.fallbackIconURL(for: "example.com")?.absoluteString == "https://example.com/favicon.ico", "Fallback favicon URL should be stable")
     }
 
     private static func assert(_ condition: @autoclosure () throws -> Bool, _ message: String) throws {

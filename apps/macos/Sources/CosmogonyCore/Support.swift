@@ -520,6 +520,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
     public var spaceName: String
     public var note: String
     public var status: ClipStatus
+    public var isPinned: Bool
+    public var trashedAt: Date?
     public var searchText: String
 
     public init(
@@ -539,7 +541,9 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         spaceID: String? = nil,
         spaceName: String = "",
         note: String,
-        status: ClipStatus
+        status: ClipStatus,
+        isPinned: Bool = false,
+        trashedAt: Date? = nil
     ) {
         self.id = id
         self.sourceType = sourceType
@@ -558,6 +562,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         self.spaceName = spaceName
         self.note = note
         self.status = status
+        self.isPinned = isPinned
+        self.trashedAt = trashedAt
         self.searchText = ClipItem.composeSearchText(title: title, domain: domain, excerpt: excerpt, content: content, category: category, tags: tags, spaceName: spaceName, note: note)
     }
 
@@ -579,6 +585,12 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         spaceName = row["space_name"] ?? ""
         note = row["note"] ?? ""
         status = ClipStatus(rawValue: row["status"] ?? "") ?? .inbox
+        isPinned = row["is_pinned"] ?? false
+        if let trashedTimestamp: Double = row["trashed_at"] {
+            trashedAt = Date(timeIntervalSince1970: trashedTimestamp)
+        } else {
+            trashedAt = nil
+        }
         searchText = row["search_text"] ?? ""
     }
 
@@ -600,6 +612,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         container["space_name"] = spaceName
         container["note"] = note
         container["status"] = status.rawValue
+        container["is_pinned"] = isPinned
+        container["trashed_at"] = trashedAt?.timeIntervalSince1970
         container["search_text"] = searchText
     }
 

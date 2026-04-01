@@ -70,11 +70,11 @@ private struct SidebarSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.headline)
+                    .cosmoTextFont(title, size: 15, weight: .semibold)
                     .foregroundStyle(CosmoPalette.ink)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.caption)
+                        .cosmoTextFont(subtitle, size: 12)
                         .foregroundStyle(CosmoPalette.textSecondary)
                 }
             }
@@ -200,6 +200,7 @@ private struct SearchField: View {
                 .foregroundStyle(CosmoPalette.textSecondary)
             TextField("Search title, domain, tags, notes…", text: $text)
                 .textFieldStyle(.plain)
+                .cosmoInputFont()
                 .foregroundStyle(CosmoPalette.ink)
         }
         .padding(.horizontal, 16)
@@ -212,6 +213,52 @@ private struct SearchField: View {
                         .strokeBorder(CosmoPalette.line, lineWidth: 1)
                 )
         )
+    }
+}
+
+private struct TopBarMenu<Content: View>: View {
+    let title: String
+    let value: String
+    @ViewBuilder var content: Content
+
+    init(title: String, value: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.value = value
+        self.content = content()
+    }
+
+    var body: some View {
+        Menu {
+            content
+        } label: {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title.uppercased())
+                        .cosmoTextFont(title.uppercased(), size: 10, weight: .semibold, design: .rounded)
+                        .foregroundStyle(CosmoPalette.textSecondary)
+                    Text(value)
+                        .cosmoTextFont(value, size: 14, weight: .medium)
+                        .foregroundStyle(CosmoPalette.ink)
+                        .lineLimit(1)
+                }
+
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(CosmoPalette.textSecondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(CosmoPalette.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(CosmoPalette.line, lineWidth: 1)
+                    )
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
@@ -247,10 +294,10 @@ private struct InfoBadge: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .cosmoTextFont(title.uppercased(), size: 10, weight: .semibold, design: .rounded)
                 .foregroundStyle(CosmoPalette.textSecondary)
             Text(value)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .cosmoTextFont(value, size: 13, weight: .medium, design: .rounded)
                 .foregroundStyle(CosmoPalette.ink)
         }
         .padding(.horizontal, 12)
@@ -263,6 +310,45 @@ private struct InfoBadge: View {
                         .strokeBorder(CosmoPalette.line, lineWidth: 1)
                 )
         )
+    }
+}
+
+private struct ClipSiteIconBadge: View {
+    let clip: ClipItem
+    let accent: Color
+    let fallbackIcon: String
+
+    @StateObject private var model: SiteIconViewModel
+
+    init(clip: ClipItem, accent: Color, fallbackIcon: String) {
+        self.clip = clip
+        self.accent = accent
+        self.fallbackIcon = fallbackIcon
+        _model = StateObject(wrappedValue: SiteIconViewModel(urlString: clip.url))
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(accent.opacity(0.16))
+            .frame(width: 50, height: 50)
+            .overlay {
+                Group {
+                    if let image = model.image {
+                        Image(nsImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .padding(8)
+                    } else {
+                        Image(systemName: fallbackIcon)
+                            .font(.title3)
+                            .foregroundStyle(accent)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .task(id: clip.url) {
+                await model.loadIfNeeded()
+            }
     }
 }
 
@@ -280,10 +366,10 @@ private struct PlatformShelfCard: View {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(bucket.title)
-                            .font(.system(size: 22, weight: .semibold, design: .serif))
+                            .cosmoTextFont(bucket.title, size: 22, weight: .semibold, design: .serif)
                             .foregroundStyle(CosmoPalette.ink)
                         Text("精选样例与最新命中会在这里形成一个更安静、更易扫读的内容分区。")
-                            .font(.subheadline)
+                            .cosmoTextFont("精选样例与最新命中会在这里形成一个更安静、更易扫读的内容分区。", size: 15)
                             .foregroundStyle(CosmoPalette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -295,6 +381,7 @@ private struct PlatformShelfCard: View {
                     } label: {
                         HStack(spacing: 8) {
                             Text(isSelected ? "当前筛选" : "查看全部")
+                                .cosmoTextFont(isSelected ? "当前筛选" : "查看全部", size: 14, weight: .medium)
                             Image(systemName: "arrow.up.right")
                                 .font(.caption.weight(.semibold))
                         }
@@ -312,7 +399,7 @@ private struct PlatformShelfCard: View {
                 }
 
                 if clips.isEmpty {
-                    ContentUnavailableView("No clips yet", systemImage: "square.grid.2x2", description: Text("该分类当前没有匹配数据。"))
+                    ContentUnavailableView("No clips yet", systemImage: "square.grid.2x2", description: Text("该分类当前没有匹配数据。").cosmoTextFont("该分类当前没有匹配数据。", size: 14))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 18)
                 } else {
@@ -392,10 +479,10 @@ private struct ClipCanvasCard: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(clip.platformBucket.title)
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .cosmoTextFont(clip.platformBucket.title, size: 11, weight: .semibold, design: .rounded)
                         .foregroundStyle(CosmoPalette.textSecondary)
                     Text(clip.title)
-                        .font(.system(size: 19, weight: .semibold, design: .serif))
+                        .cosmoTextFont(clip.title, size: 19, weight: .semibold, design: .serif)
                         .foregroundStyle(CosmoPalette.ink)
                         .lineLimit(2)
                 }
@@ -406,17 +493,17 @@ private struct ClipCanvasCard: View {
             }
 
             Text(clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary)
-                .font(.subheadline)
+                .cosmoTextFont(clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary, size: 15)
                 .foregroundStyle(CosmoPalette.textSecondary)
                 .lineLimit(4)
 
             HStack(spacing: 8) {
                 Text(clip.domain)
-                    .font(.caption.weight(.medium))
+                    .cosmoTextFont(clip.domain, size: 12, weight: .medium)
                     .foregroundStyle(CosmoPalette.moss)
                 if !clip.category.isEmpty {
                     Text(clip.category)
-                        .font(.caption)
+                        .cosmoTextFont(clip.category, size: 12)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .background(
@@ -428,7 +515,7 @@ private struct ClipCanvasCard: View {
 
             if !clip.tags.isEmpty {
                 Text(clip.tags.prefix(3).joined(separator: " · "))
-                    .font(.caption)
+                    .cosmoTextFont(clip.tags.prefix(3).joined(separator: " · "), size: 12)
                     .foregroundStyle(CosmoPalette.textSecondary)
             }
         }
@@ -452,19 +539,12 @@ private struct ClipStripRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(accent.opacity(0.16))
-                .frame(width: 50, height: 50)
-                .overlay(
-                    Image(systemName: icon)
-                        .font(.title3)
-                        .foregroundStyle(accent)
-                )
+            ClipSiteIconBadge(clip: clip, accent: accent, fallbackIcon: icon)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(clip.title)
-                        .font(.headline)
+                        .cosmoTextFont(clip.title, size: 17, weight: .semibold)
                         .foregroundStyle(CosmoPalette.ink)
                         .lineLimit(1)
                     Spacer(minLength: 8)
@@ -475,20 +555,20 @@ private struct ClipStripRow: View {
 
                 HStack(spacing: 8) {
                     Text(clip.platformBucket.title)
-                        .font(.caption.weight(.semibold))
+                        .cosmoTextFont(clip.platformBucket.title, size: 12, weight: .semibold)
                         .foregroundStyle(accent)
                     Text(clip.domain)
-                        .font(.caption)
+                        .cosmoTextFont(clip.domain, size: 12)
                         .foregroundStyle(CosmoPalette.textSecondary)
                     if !clip.spaceName.isEmpty {
                         Text("• \(clip.spaceName)")
-                            .font(.caption.weight(.medium))
+                            .cosmoTextFont("• \(clip.spaceName)", size: 12, weight: .medium)
                             .foregroundStyle(CosmoPalette.moss)
                     }
                 }
 
                 Text(clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary)
-                    .font(.subheadline)
+                    .cosmoTextFont(clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary, size: 15)
                     .foregroundStyle(CosmoPalette.textSecondary)
                     .lineLimit(2)
             }
@@ -561,8 +641,6 @@ private struct SettingsSidebarButtonStyle: ButtonStyle {
 
 public struct RootView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var spaceNameDraft = ""
-    @State private var spaceTagsDraft = ""
 
     private let filters: [PlatformFilter] = [.all] + PlatformBucket.allCases.map(PlatformFilter.bucket)
 
@@ -582,7 +660,7 @@ public struct RootView: View {
         case let .day(day) where Calendar.current.isDateInToday(day):
             return "主界面默认展示今天收进来的全部剪藏，便于先完成当天的信息归拢。"
         default:
-            return "当前全局视图命中的内容会在这里展开，侧边栏可以调整更高阶的显示范围。"
+            return "当前全局视图命中的内容会在这里展开，顶部菜单负责主筛选，侧边补充辅助动作。"
         }
     }
 
@@ -591,13 +669,13 @@ public struct RootView: View {
             SoftBackground()
 
             ScrollView {
-                HStack(alignment: .top, spacing: 18) {
-                    sidebarPaneView
-                    VStack(spacing: 18) {
-                        header
+                VStack(spacing: 18) {
+                    topBar
+
+                    HStack(alignment: .top, spacing: 18) {
+                        sidebarPaneView
                         contentCanvas
                     }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
                 .padding(22)
             }
@@ -607,6 +685,37 @@ public struct RootView: View {
             }
         }
         .frame(minWidth: 1060, minHeight: 820)
+        .alert(
+            "Link already exists",
+            isPresented: Binding(
+                get: { model.duplicateCapturePrompt != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        model.cancelDuplicateCapture()
+                    }
+                }
+            )
+        ) {
+            Button("Cancel", role: .cancel) {
+                model.cancelDuplicateCapture()
+            }
+            Button("Add Anyway") {
+                model.confirmDuplicateCapture()
+            }
+        } message: {
+            let existingTitle = model.duplicateCapturePrompt?.existingClipTitle ?? ""
+            Text("发现相同链接已存在：\(existingTitle)\n\n你可以取消本次添加，或仍然继续保存。")
+                .cosmoTextFont("发现相同链接已存在：\(existingTitle)\n\n你可以取消本次添加，或仍然继续保存。", size: 14)
+        }
+        .alert("Discard unsaved changes?", isPresented: $model.showUnsavedClipClosePrompt) {
+            Button("Continue Editing", role: .cancel) {}
+            Button("Discard Changes", role: .destructive) {
+                model.discardUnsavedClipChangesAndClose()
+            }
+        } message: {
+            Text("当前详情卡片还有未保存的修改，关闭后这些改动会丢失。")
+                .cosmoTextFont("当前详情卡片还有未保存的修改，关闭后这些改动会丢失。", size: 14)
+        }
         .onChange(of: model.selectedScope) { _, _ in model.refreshFilters() }
         .onChange(of: model.selectedPlatform) { _, _ in model.refreshFilters() }
         .onChange(of: model.selectedSpaceID) { _, _ in model.refreshFilters() }
@@ -614,54 +723,148 @@ public struct RootView: View {
         .onChange(of: model.timeboxDraft) { _, _ in model.refreshFilters() }
     }
 
-    private var header: some View {
+    private var topBar: some View {
         CardSurface {
-            HStack(alignment: .center, spacing: 18) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Cosmogony")
-                        .font(.system(size: 38, weight: .semibold, design: .serif))
-                        .foregroundStyle(CosmoPalette.ink)
-                    Text("把链接、灵感和稍纵即逝的信息收拢成一块更安静的思绪画布。")
-                        .font(.title3)
-                        .foregroundStyle(CosmoPalette.textSecondary)
-                    HStack(spacing: 10) {
-                        InfoBadge(title: "Bridge", value: model.bridgeStatus)
-                        InfoBadge(title: "Status", value: model.statusMessage)
-                        InfoBadge(title: "Search", value: model.searchText.isEmpty ? "Idle" : model.searchText)
-                        if !model.captureTagDraft.isEmpty {
-                            InfoBadge(title: "Capture Tag", value: model.captureTagDraft)
+            HStack(alignment: .center, spacing: 12) {
+                SearchField(text: $model.searchText)
+                    .frame(maxWidth: .infinity)
+
+                Button {
+                    model.clearSearch()
+                } label: {
+                    Label("Clear", systemImage: "xmark.circle")
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+
+                Button {
+                    model.resetPrimaryFilters()
+                } label: {
+                    Label("Reset To Today", systemImage: "arrow.counterclockwise")
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
+
+                TopBarMenu(title: "Settings", value: model.selectedSettingsTab.title) {
+                    ForEach(SettingsTab.allCases) { tab in
+                        Button {
+                            model.openSettingsTab(tab)
+                        } label: {
+                            HStack {
+                                Text(tab.title)
+                                if model.selectedSettingsTab == tab {
+                                    Spacer(minLength: 10)
+                                    Image(systemName: "checkmark")
+                                }
+                            }
                         }
                     }
                 }
 
-                Spacer(minLength: 16)
+                TopBarMenu(title: "Platforms", value: model.selectedPlatform.label) {
+                    ForEach(filters.indices, id: \.self) { index in
+                        let filter = filters[index]
+                        Button {
+                            model.focusPlatform(filter)
+                        } label: {
+                            HStack {
+                                Text(filter.label)
+                                    .cosmoTextFont(filter.label, size: 14, weight: .medium)
+                                if filter == model.selectedPlatform {
+                                    Spacer(minLength: 10)
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
 
-                VStack(alignment: .trailing, spacing: 12) {
-                    Text(model.selectedPlatform.label)
-                        .font(.system(size: 30, weight: .semibold, design: .serif))
-                        .foregroundStyle(CosmoPalette.ink)
-                    Text("大量剪藏先汇入今天的列表，再按 space、tag 和筛选条件继续收束。")
-                        .font(.subheadline)
-                        .foregroundStyle(CosmoPalette.textSecondary)
+                TopBarMenu(title: "View Scope", value: model.selectedScope.title) {
+                    ForEach(ClipScope.allCases) { scope in
+                        Button {
+                            model.selectedScope = scope
+                        } label: {
+                            HStack {
+                                Text(scope.title)
+                                    .cosmoTextFont(scope.title, size: 14, weight: .medium)
+                                if model.selectedScope == scope {
+                                    Spacer(minLength: 10)
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                TopBarMenu(title: "Spaces", value: selectedSpaceLabel) {
+                    Button {
+                        model.focusSpace(nil)
+                    } label: {
+                        HStack {
+                            Text("All Spaces")
+                            if model.selectedSpaceID == nil {
+                                Spacer(minLength: 10)
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+
+                    if model.spaces.isEmpty {
+                        Text("No spaces yet")
+                    } else {
+                        Divider()
+                        ForEach(model.spaces) { space in
+                            Button {
+                                model.focusSpace(space.id)
+                                if let firstTag = space.tags.first {
+                                    model.captureTagDraft = firstTag
+                                }
+                            } label: {
+                                HStack {
+                                    Text(space.name)
+                                        .cosmoTextFont(space.name, size: 14, weight: .medium)
+                                    if model.selectedSpaceID == space.id {
+                                        Spacer(minLength: 10)
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-        .frame(minHeight: 158)
+        .frame(minHeight: 94)
+    }
+
+    private var selectedSpaceLabel: String {
+        guard
+            let selectedSpaceID = model.selectedSpaceID,
+            let space = model.spaces.first(where: { $0.id == selectedSpaceID })
+        else {
+            return "All Spaces"
+        }
+
+        return space.name
     }
 
     private var sidebarPaneView: some View {
         CardSurface {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Sidebar")
-                        .font(.system(size: 26, weight: .semibold, design: .serif))
+                    Text("Utility")
+                        .font(.system(size: 24, weight: .semibold, design: .serif))
                         .foregroundStyle(CosmoPalette.ink)
-                    Text("统计、检索、范围控制和设置入口都集中在这里，主内容区只负责展示结果。")
-                        .font(.subheadline)
+                    Text("把捕获动作、时间范围和辅助状态收在侧边，搜索与筛选主控件全部回到顶部。")
+                        .cosmoTextFont("把捕获动作、时间范围和辅助状态收在侧边，搜索与筛选主控件全部回到顶部。", size: 13)
                         .foregroundStyle(CosmoPalette.textSecondary)
                 }
 
-                SidebarSection(title: "Visible", subtitle: "这些统计现在固定放在侧边栏纵向展示。") {
+                SidebarSection(title: "Visible", subtitle: "这些统计继续固定显示在侧边，方便快速感知当前范围。") {
                     VStack(spacing: 10) {
                         StatPill(title: "Visible", value: "\(model.clips.count)")
                         StatPill(title: "Inbox", value: "\(model.stats.inboxCount)")
@@ -674,118 +877,9 @@ public struct RootView: View {
                 Divider()
                     .overlay(CosmoPalette.line)
 
-                SidebarSection(title: "Search", subtitle: "所有搜索与重置操作都直接生效。") {
-                    SearchField(text: $model.searchText)
-                    HStack(spacing: 10) {
-                        Button {
-                            model.clearSearch()
-                        } label: {
-                            Label("Clear Search", systemImage: "xmark.circle")
-                                .frame(maxWidth: .infinity)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
-
-                        Button {
-                            model.resetPrimaryFilters()
-                        } label: {
-                            Label("Reset To Today", systemImage: "arrow.counterclockwise")
-                                .frame(maxWidth: .infinity)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
-                    }
-                }
-
-                Divider()
-                    .overlay(CosmoPalette.line)
-
-                SidebarSection(title: "Spaces", subtitle: "创建自己的模块，并通过 tag 自动承接后续剪藏。") {
-                    VStack(spacing: 10) {
-                        Button {
-                            model.focusSpace(nil)
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("All Spaces")
-                                        .font(.headline)
-                                    Text("不过滤自定义 space")
-                                        .font(.caption)
-                                        .foregroundStyle(model.selectedSpaceID == nil ? CosmoPalette.chipSelectedText.opacity(0.82) : CosmoPalette.textSecondary)
-                                }
-                                Spacer()
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        }
-                        .buttonStyle(SidebarButtonStyle(selected: model.selectedSpaceID == nil))
-
-                        ForEach(model.spaces) { space in
-                            Button {
-                                model.focusSpace(space.id)
-                                if let firstTag = space.tags.first {
-                                    model.captureTagDraft = firstTag
-                                }
-                            } label: {
-                                HStack(alignment: .top, spacing: 10) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(space.name)
-                                            .font(.headline)
-                                        Text(space.tags.joined(separator: ", "))
-                                            .font(.caption)
-                                            .foregroundStyle(model.selectedSpaceID == space.id ? CosmoPalette.chipSelectedText.opacity(0.82) : CosmoPalette.textSecondary)
-                                            .lineLimit(2)
-                                    }
-                                    Spacer()
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 12)
-                                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            }
-                            .buttonStyle(SidebarButtonStyle(selected: model.selectedSpaceID == space.id))
-                            .contextMenu {
-                                Button("Use First Tag For Capture") {
-                                    model.captureTagDraft = space.tags.first ?? ""
-                                }
-                                Button("Delete Space", role: .destructive) {
-                                    model.deleteSpace(space)
-                                }
-                            }
-                        }
-
-                        VStack(spacing: 8) {
-                            TextField("New space name", text: $spaceNameDraft)
-                                .textFieldStyle(.roundedBorder)
-                            TextField("Tags (comma separated)", text: $spaceTagsDraft)
-                                .textFieldStyle(.roundedBorder)
-                            Button {
-                                model.addSpace(name: spaceNameDraft, tagsText: spaceTagsDraft)
-                                spaceNameDraft = ""
-                                spaceTagsDraft = ""
-                            } label: {
-                                Label("Create Space", systemImage: "plus")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 11)
-                                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            }
-                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
-                        }
-                    }
-                }
-
-                Divider()
-                    .overlay(CosmoPalette.line)
-
                 SidebarSection(title: "Capture Tag", subtitle: "剪藏前先选择 tag，系统会自动分配到匹配该 tag 的 space。") {
                     TextField("例如 design / research / inspiration", text: $model.captureTagDraft)
+                        .cosmoInputFont()
                         .textFieldStyle(.roundedBorder)
                     if !model.spaces.isEmpty {
                         FlowTagList(tags: suggestedTags, selectedTag: $model.captureTagDraft)
@@ -805,7 +899,7 @@ public struct RootView: View {
                 Divider()
                     .overlay(CosmoPalette.line)
 
-                SidebarSection(title: "Quick Actions", subtitle: "原来很多没有落地的按钮，现在都接上了真实功能。") {
+                SidebarSection(title: "Quick Actions", subtitle: "保留高频操作入口，方便在同一侧完成捕获与整理。") {
                     VStack(spacing: 10) {
                         Button {
                             model.captureCurrentPage()
@@ -878,103 +972,12 @@ public struct RootView: View {
                 Divider()
                     .overlay(CosmoPalette.line)
 
-                SidebarSection(title: "View Scope", subtitle: "切换当前视图包含哪些状态。") {
-                    VStack(spacing: 10) {
-                        ForEach(ClipScope.allCases) { scope in
-                            Button {
-                                model.selectedScope = scope
-                            } label: {
-                                HStack(alignment: .top, spacing: 10) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(scope.title)
-                                            .font(.headline)
-                                        Text(scopeDescription(scope))
-                                            .font(.caption)
-                                            .foregroundStyle(model.selectedScope == scope ? CosmoPalette.chipSelectedText.opacity(0.82) : CosmoPalette.textSecondary)
-                                    }
-                                    Spacer(minLength: 12)
-                                    if model.selectedScope == scope {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .font(.title3)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 13)
-                                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            }
-                            .buttonStyle(SidebarButtonStyle(selected: model.selectedScope == scope))
-                        }
-                    }
-                }
-
-                Divider()
-                    .overlay(CosmoPalette.line)
-
-                SidebarSection(title: "Platforms", subtitle: "所有分类筛选都改成侧边栏纵向列表。") {
-                    VStack(spacing: 10) {
-                        ForEach(filters.indices, id: \.self) { index in
-                            let filter = filters[index]
-                            Button {
-                                model.focusPlatform(filter)
-                            } label: {
-                                HStack(spacing: 10) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(filter.label)
-                                            .font(.headline)
-                                        Text(platformSubtitle(filter))
-                                            .font(.caption)
-                                            .foregroundStyle(filter == model.selectedPlatform ? CosmoPalette.chipSelectedText.opacity(0.82) : CosmoPalette.textSecondary)
-                                    }
-                                    Spacer()
-                                    Text(platformCount(filter))
-                                        .font(.caption.weight(.semibold))
-                                        .padding(.horizontal, 9)
-                                        .padding(.vertical, 5)
-                                        .background(
-                                            Capsule(style: .continuous)
-                                                .fill(filter == model.selectedPlatform ? CosmoPalette.chipSelectedStroke : CosmoPalette.gold.opacity(0.18))
-                                        )
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 13)
-                                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            }
-                            .buttonStyle(SidebarButtonStyle(selected: filter == model.selectedPlatform))
-                        }
-                    }
-                }
-
-                Divider()
-                    .overlay(CosmoPalette.line)
-
                 SidebarSection(title: "Timebox", subtitle: "整个 app 只保留一个外层滚动条，时间范围也放回侧边栏。") {
                     TimeboxComposer(draft: $model.timeboxDraft)
                 }
-
-                Divider()
-                    .overlay(CosmoPalette.line)
-
-                SidebarSection(title: "Settings", subtitle: "这些按钮会直接打开对应设置页，而不是只做样子。") {
-                    VStack(spacing: 10) {
-                        ForEach(SettingsTab.allCases) { tab in
-                            Button {
-                                model.openSettingsTab(tab)
-                            } label: {
-                                Label(tab.title, systemImage: tab.systemImage)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 12)
-                                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            }
-                            .buttonStyle(SurfaceButtonStyle(fill: model.selectedSettingsTab == tab ? CosmoPalette.chipSelectedFill : CosmoPalette.surface, foreground: model.selectedSettingsTab == tab ? CosmoPalette.chipSelectedText : CosmoPalette.ink, border: model.selectedSettingsTab == tab ? CosmoPalette.chipSelectedStroke : CosmoPalette.line))
-                        }
-                    }
-                }
             }
         }
-        .frame(minWidth: 280, idealWidth: 300, maxWidth: 320, alignment: .topLeading)
+        .frame(minWidth: 248, idealWidth: 260, maxWidth: 278, alignment: .topLeading)
     }
 
     private var contentCanvas: some View {
@@ -985,17 +988,17 @@ public struct RootView: View {
                         .font(.system(size: 24, weight: .semibold, design: .serif))
                         .foregroundStyle(CosmoPalette.ink)
                     Text(canvasSubheadline)
-                        .font(.subheadline)
+                        .cosmoTextFont(canvasSubheadline, size: 13)
                         .foregroundStyle(CosmoPalette.textSecondary)
                     if let selectedSpaceID = model.selectedSpaceID, let space = model.spaces.first(where: { $0.id == selectedSpaceID }) {
                         Text("Current space filter: \(space.name)")
-                            .font(.caption.weight(.medium))
+                            .cosmoTextFont("Current space filter: \(space.name)", size: 12, weight: .medium)
                             .foregroundStyle(CosmoPalette.moss)
                     }
                 }
 
                 if model.clips.isEmpty {
-                    ContentUnavailableView("No clips found", systemImage: "tray", description: Text("调整筛选条件，或先通过剪贴板 / 当前网页捕获内容。"))
+                    ContentUnavailableView("No clips found", systemImage: "tray", description: Text("调整筛选条件，或先通过剪贴板 / 当前网页捕获内容。").cosmoTextFont("调整筛选条件，或先通过剪贴板 / 当前网页捕获内容。", size: 14))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 48)
                 } else {
@@ -1007,6 +1010,29 @@ public struct RootView: View {
                                 ClipStripRow(clip: clip, selected: model.selectedClipID == clip.id)
                             }
                             .buttonStyle(ClipCardButtonStyle(selected: model.selectedClipID == clip.id))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button {
+                                    model.deleteOrTrash(clip)
+                                } label: {
+                                    Label(clip.status == .trashed ? "Delete Forever" : "Delete", systemImage: "trash")
+                                }
+                                .tint(.red)
+
+                                Button {
+                                    model.togglePin(for: clip)
+                                } label: {
+                                    Label(clip.isPinned ? "Unpin" : "Pin", systemImage: clip.isPinned ? "pin.slash" : "pin")
+                                }
+                                .tint(.orange)
+                            }
+                            .contextMenu {
+                                Button(clip.isPinned ? "取消置顶" : "置顶") {
+                                    model.togglePin(for: clip)
+                                }
+                                Button(clip.status == .trashed ? "彻底删除" : "删除", role: .destructive) {
+                                    model.deleteOrTrash(clip)
+                                }
+                            }
                         }
                     }
                 }
@@ -1015,71 +1041,48 @@ public struct RootView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
-    private func scopeDescription(_ scope: ClipScope) -> String {
-        switch scope {
-        case .all:
-            return "展示当前时间范围内的全部有效剪藏"
-        case .inbox:
-            return "只看尚未整理的新增剪藏"
-        case .library:
-            return "只看已归档和处理过的内容"
-        case .trash:
-            return "查看已移入废纸篓的剪藏"
-        }
-    }
-
-    private func platformSubtitle(_ filter: PlatformFilter) -> String {
-        switch filter {
-        case .all:
-            return "显示所有平台的剪藏"
-        case let .bucket(bucket):
-            return "聚焦 \(bucket.title) 的内容"
-        }
-    }
-
-    private func platformCount(_ filter: PlatformFilter) -> String {
-        switch filter {
-        case .all:
-            return "\(model.clips.count)"
-        case let .bucket(bucket):
-            return "\(model.stats.bucketCounts[bucket, default: 0])"
-        }
-    }
-
     private var suggestedTags: [String] {
         Array(Set(model.spaces.flatMap(\.tags))).sorted()
     }
 
     @ViewBuilder
     private func overlayBackdrop(_ overlay: AppOverlay) -> some View {
-        ZStack {
-            Color.black.opacity(0.28)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    model.closeOverlay()
-                }
+        GeometryReader { proxy in
+            let availableWidth = max(320, proxy.size.width - 48)
+            let clipDetailHeight = max(360, min(proxy.size.height - 64, 680))
+            let settingsHeight = max(560, min(proxy.size.height - 64, 760))
 
-            switch overlay {
-            case .settings:
-                overlayCard(width: 960) {
-                    SettingsOverlayCard()
-                        .environmentObject(model)
-                }
-            case .clipDetail:
-                overlayCard(width: 720) {
-                    ClipDetailOverlayCard()
-                        .environmentObject(model)
+            ZStack {
+                Color.black.opacity(0.28)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        model.requestCloseOverlay()
+                    }
+
+                switch overlay {
+                case .settings:
+                    overlayCard(width: min(960, availableWidth), maxHeight: settingsHeight) {
+                        SettingsOverlayCard()
+                            .environmentObject(model)
+                    }
+                case .clipDetail:
+                    overlayCard(width: min(640, availableWidth), maxHeight: clipDetailHeight) {
+                        ClipDetailOverlayCard()
+                            .environmentObject(model)
+                    }
                 }
             }
         }
     }
 
-    private func overlayCard<Content: View>(width: CGFloat, @ViewBuilder content: () -> Content) -> some View {
+    private func overlayCard<Content: View>(width: CGFloat, maxHeight: CGFloat, @ViewBuilder content: () -> Content) -> some View {
         CardSurface {
             content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(width: width, alignment: .topLeading)
+        .frame(width: width, height: maxHeight, alignment: .topLeading)
         .shadow(color: CosmoPalette.shadow, radius: 28, x: 0, y: 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 }
 
@@ -1130,6 +1133,7 @@ struct ClipInspectorView: View {
 
     let clip: ClipItem?
 
+    @State private var aiSummary = ""
     @State private var category = ""
     @State private var tags = ""
     @State private var note = ""
@@ -1141,13 +1145,13 @@ struct ClipInspectorView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(clip.platformBucket.title)
-                            .font(.caption.weight(.semibold))
+                            .cosmoTextFont(clip.platformBucket.title, size: 12, weight: .semibold)
                             .foregroundStyle(CosmoPalette.textSecondary)
                         Text(clip.title)
-                            .font(.system(size: 28, weight: .semibold, design: .serif))
+                            .cosmoTextFont(clip.title, size: 28, weight: .semibold, design: .serif)
                             .foregroundStyle(CosmoPalette.ink)
                         Text(clip.url)
-                            .font(.footnote)
+                            .cosmoTextFont(clip.url, size: 13)
                             .foregroundStyle(CosmoPalette.textSecondary)
                             .textSelection(.enabled)
                     }
@@ -1175,18 +1179,28 @@ struct ClipInspectorView: View {
                                 .buttonStyle(.borderless)
                             }
                         }
-                        TextEditor(text: .constant(clip.aiSummary.isEmpty ? "正在准备中文摘要…" : clip.aiSummary))
-                            .frame(minHeight: 130)
-                            .padding(8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(CosmoPalette.surfaceSoft)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                            .strokeBorder(CosmoPalette.line, lineWidth: 1)
-                                    )
-                            )
-                            .disabled(true)
+                        ZStack(alignment: .topLeading) {
+                            if aiSummary.isEmpty {
+                                Text("正在准备中文摘要…")
+                                    .cosmoTextFont("正在准备中文摘要…", size: 14)
+                                    .foregroundStyle(CosmoPalette.textSecondary)
+                                    .padding(.top, 16)
+                                    .padding(.leading, 14)
+                            }
+                            TextEditor(text: $aiSummary)
+                                .cosmoInputFont(size: 14)
+                                .scrollContentBackground(.hidden)
+                                .frame(minHeight: 130)
+                                .padding(8)
+                        }
+                        .background(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(CosmoPalette.surfaceSoft)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .strokeBorder(CosmoPalette.line, lineWidth: 1)
+                                )
+                        )
                     }
 
                     HStack(spacing: 10) {
@@ -1216,6 +1230,7 @@ struct ClipInspectorView: View {
                         Text("Category")
                             .font(.headline)
                         TextField("Category", text: $category)
+                            .cosmoInputFont()
                             .textFieldStyle(.roundedBorder)
                     }
 
@@ -1223,6 +1238,7 @@ struct ClipInspectorView: View {
                         Text("Tags")
                             .font(.headline)
                         TextField("tag1, tag2", text: $tags)
+                            .cosmoInputFont()
                             .textFieldStyle(.roundedBorder)
                     }
 
@@ -1230,6 +1246,7 @@ struct ClipInspectorView: View {
                         Text("Note")
                             .font(.headline)
                         TextEditor(text: $note)
+                            .cosmoInputFont()
                             .frame(minHeight: 150)
                             .padding(8)
                             .background(
@@ -1253,6 +1270,7 @@ struct ClipInspectorView: View {
                     Button {
                         model.saveClipEdits(
                             id: clip.id,
+                            aiSummary: aiSummary,
                             category: category,
                             tagsText: tags,
                             note: note,
@@ -1269,21 +1287,55 @@ struct ClipInspectorView: View {
                 }
                 .onAppear {
                     populate(from: clip)
+                    updateDirtyState(for: clip)
                 }
                 .onChange(of: clip.id) { _, _ in
                     populate(from: clip)
+                    updateDirtyState(for: clip)
+                }
+                .onChange(of: clip.aiSummary) { _, value in
+                    guard !model.clipEditorHasUnsavedChanges else { return }
+                    aiSummary = value
+                    updateDirtyState(for: clip)
+                }
+                .onChange(of: aiSummary) { _, _ in
+                    updateDirtyState(for: clip)
+                }
+                .onChange(of: category) { _, _ in
+                    updateDirtyState(for: clip)
+                }
+                .onChange(of: tags) { _, _ in
+                    updateDirtyState(for: clip)
+                }
+                .onChange(of: note) { _, _ in
+                    updateDirtyState(for: clip)
+                }
+                .onChange(of: status) { _, _ in
+                    updateDirtyState(for: clip)
                 }
             } else {
-                ContentUnavailableView("No clip selected", systemImage: "square.stack.3d.up.slash", description: Text("从左侧画布里选择一张卡片，这里会显示详情与可编辑字段。"))
+                ContentUnavailableView("No clip selected", systemImage: "square.stack.3d.up.slash", description: Text("从左侧画布里选择一张卡片，这里会显示详情与可编辑字段。").cosmoTextFont("从左侧画布里选择一张卡片，这里会显示详情与可编辑字段。", size: 14))
             }
         }
     }
 
     private func populate(from clip: ClipItem) {
+        aiSummary = clip.aiSummary
         category = clip.category
         tags = clip.tags.joined(separator: ", ")
         note = clip.note
         status = clip.status
+    }
+
+    private func updateDirtyState(for clip: ClipItem) {
+        model.syncClipEditorDirtyState(
+            clipID: clip.id,
+            aiSummary: aiSummary,
+            category: category,
+            tagsText: tags,
+            note: note,
+            status: status
+        )
     }
 }
 
@@ -1291,18 +1343,19 @@ private struct ClipDetailOverlayCard: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Clip Detail")
                         .font(.system(size: 30, weight: .semibold, design: .serif))
                         .foregroundStyle(CosmoPalette.ink)
                     Text("点击条目后这里会弹出详情卡片，摘要会自动尝试用 AI 生成中文版本。")
+                        .cosmoTextFont("点击条目后这里会弹出详情卡片，摘要会自动尝试用 AI 生成中文版本。", size: 13)
                         .foregroundStyle(CosmoPalette.textSecondary)
                 }
                 Spacer()
                 Button {
-                    model.closeOverlay()
+                    model.requestCloseOverlay()
                 } label: {
                     Image(systemName: "xmark")
                         .padding(10)
@@ -1311,8 +1364,16 @@ private struct ClipDetailOverlayCard: View {
                 .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
             }
 
-            ClipInspectorView(clip: model.selectedClip)
+            Divider()
+                .overlay(CosmoPalette.line)
+
+            ScrollView {
+                ClipInspectorView(clip: model.selectedClip)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
@@ -1328,6 +1389,7 @@ struct CategoryRulesStudio: View {
                     Text("Category Rules")
                         .font(.system(size: 24, weight: .semibold, design: .serif))
                     Text("把人工维护的别名规则作为 AI 分类前的一层稳定语义约束。")
+                        .cosmoTextFont("把人工维护的别名规则作为 AI 分类前的一层稳定语义约束。", size: 13)
                         .foregroundStyle(CosmoPalette.textSecondary)
                 }
                 Spacer()
@@ -1339,8 +1401,10 @@ struct CategoryRulesStudio: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 TextField("Canonical category", text: $canonical)
+                    .cosmoInputFont()
                     .textFieldStyle(.roundedBorder)
                 TextField("Aliases (comma separated)", text: $aliases)
+                    .cosmoInputFont()
                     .textFieldStyle(.roundedBorder)
                 Button("Add Rule") {
                     model.addCategoryRule(canonical: canonical, aliases: aliases)
@@ -1355,9 +1419,9 @@ struct CategoryRulesStudio: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(rule.canonical)
-                                .font(.headline)
+                                .cosmoTextFont(rule.canonical, size: 17, weight: .semibold)
                             Text(rule.aliases.joined(separator: ", "))
-                                .font(.caption)
+                                .cosmoTextFont(rule.aliases.joined(separator: ", "), size: 12)
                                 .foregroundStyle(CosmoPalette.textSecondary)
                         }
                         Spacer()
@@ -1399,7 +1463,7 @@ public struct SettingsRootView: View {
                         .font(.system(size: 28, weight: .semibold, design: .serif))
                         .foregroundStyle(CosmoPalette.ink)
                     Text("这里使用自定义侧边导航，保证外部按钮点击后一定能切到对应页面。")
-                        .font(.subheadline)
+                        .cosmoTextFont("这里使用自定义侧边导航，保证外部按钮点击后一定能切到对应页面。", size: 13)
                         .foregroundStyle(CosmoPalette.textSecondary)
 
                     ForEach(SettingsTab.allCases) { tab in
@@ -1448,13 +1512,14 @@ private struct SettingsOverlayCard: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Settings")
                         .font(.system(size: 30, weight: .semibold, design: .serif))
                         .foregroundStyle(CosmoPalette.ink)
                     Text("这些入口现在直接在主窗口内切换，不再依赖系统设置窗口。")
+                        .cosmoTextFont("这些入口现在直接在主窗口内切换，不再依赖系统设置窗口。", size: 13)
                         .foregroundStyle(CosmoPalette.textSecondary)
                 }
                 Spacer()
@@ -1468,10 +1533,17 @@ private struct SettingsOverlayCard: View {
                 .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
             }
 
-            SettingsRootView()
-                .environmentObject(model)
-                .padding(0)
+            Divider()
+                .overlay(CosmoPalette.line)
+
+            ScrollView([.vertical, .horizontal]) {
+                SettingsRootView()
+                    .environmentObject(model)
+                    .padding(0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
@@ -1483,6 +1555,7 @@ struct AppearanceSettingsView: View {
             Text("Appearance")
                 .font(.title2.weight(.semibold))
             Text("选择 Cosmogony 使用浅色、深色，或跟随系统外观。")
+                .cosmoTextFont("选择 Cosmogony 使用浅色、深色，或跟随系统外观。", size: 14)
                 .foregroundStyle(CosmoPalette.textSecondary)
 
             CardSurface {
@@ -1506,6 +1579,7 @@ struct AppearanceSettingsView: View {
                                     .font(.headline)
                                     .foregroundStyle(CosmoPalette.ink)
                                 Text(appearance.description)
+                                    .cosmoTextFont(appearance.description, size: 14)
                                     .foregroundStyle(CosmoPalette.textSecondary)
                             }
                         }
@@ -1600,14 +1674,19 @@ struct ProviderEditorCard: View {
                 }
 
                 TextField("Display name", text: $profile.displayName)
+                    .cosmoInputFont()
                     .textFieldStyle(.roundedBorder)
                 TextField("Base URL", text: $profile.baseURL)
+                    .cosmoInputFont()
                     .textFieldStyle(.roundedBorder)
                 TextField("Default model", text: $profile.defaultModel)
+                    .cosmoInputFont()
                     .textFieldStyle(.roundedBorder)
                 TextField("Embedding model", text: $profile.embeddingModel)
+                    .cosmoInputFont()
                     .textFieldStyle(.roundedBorder)
                 SecureField("API key", text: $apiKey)
+                    .cosmoInputFont()
                     .textFieldStyle(.roundedBorder)
 
                 HStack {
@@ -1663,6 +1742,7 @@ struct ShortcutSettingsView: View {
 
             if let conflict = model.shortcutConflict {
                 Text(conflict)
+                    .cosmoTextFont(conflict, size: 14)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 14).fill(Color.red.opacity(0.12)))
@@ -1694,7 +1774,7 @@ struct ShortcutRecorder: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(label)
-                        .font(.headline)
+                        .cosmoTextFont(label, size: 17, weight: .semibold)
                     Text(combination.displayString)
                         .font(.title3.monospacedDigit())
                 }
