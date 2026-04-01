@@ -291,6 +291,53 @@ public enum AppAppearance: String, Codable, CaseIterable, Identifiable, Sendable
     }
 }
 
+public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
+    case appearance
+    case providers
+    case shortcuts
+    case capture
+    case storage
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .appearance:
+            "Appearance"
+        case .providers:
+            "Providers"
+        case .shortcuts:
+            "Shortcuts"
+        case .capture:
+            "Capture"
+        case .storage:
+            "Storage"
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .appearance:
+            "circle.lefthalf.filled"
+        case .providers:
+            "brain.head.profile"
+        case .shortcuts:
+            "command"
+        case .capture:
+            "square.and.arrow.down"
+        case .storage:
+            "internaldrive"
+        }
+    }
+}
+
+public enum AppOverlay: String, Identifiable, Sendable {
+    case settings
+    case clipDetail
+
+    public var id: String { rawValue }
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public var defaultReasoningProfileID: String?
     public var defaultEmbeddingProfileID: String?
@@ -345,6 +392,46 @@ public struct CategoryRule: Codable, Identifiable, Equatable, FetchableRecord, P
         container["id"] = id
         container["canonical"] = canonical
         container["aliases_json"] = encodeStringArray(aliases)
+        container["updated_at"] = updatedAt.timeIntervalSince1970
+    }
+}
+
+public struct Space: Codable, Identifiable, Equatable, FetchableRecord, PersistableRecord, Sendable {
+    public static let databaseTableName = "spaces"
+
+    public var id: String
+    public var name: String
+    public var tags: [String]
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: String = UUID().uuidString,
+        name: String,
+        tags: [String],
+        createdAt: Date = .now,
+        updatedAt: Date = .now
+    ) {
+        self.id = id
+        self.name = name
+        self.tags = tags
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    public init(row: Row) {
+        id = row["id"]
+        name = row["name"] ?? ""
+        tags = decodeStringArray(row["tags_json"] ?? "[]")
+        createdAt = Date(timeIntervalSince1970: row["created_at"] ?? Date().timeIntervalSince1970)
+        updatedAt = Date(timeIntervalSince1970: row["updated_at"] ?? Date().timeIntervalSince1970)
+    }
+
+    public func encode(to container: inout PersistenceContainer) {
+        container["id"] = id
+        container["name"] = name
+        container["tags_json"] = encodeStringArray(tags)
+        container["created_at"] = createdAt.timeIntervalSince1970
         container["updated_at"] = updatedAt.timeIntervalSince1970
     }
 }
@@ -429,6 +516,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
     public var aiSummary: String
     public var category: String
     public var tags: [String]
+    public var spaceID: String?
+    public var spaceName: String
     public var note: String
     public var status: ClipStatus
     public var searchText: String
@@ -447,6 +536,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         aiSummary: String,
         category: String,
         tags: [String],
+        spaceID: String? = nil,
+        spaceName: String = "",
         note: String,
         status: ClipStatus
     ) {
@@ -463,9 +554,11 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         self.aiSummary = aiSummary
         self.category = category
         self.tags = tags
+        self.spaceID = spaceID
+        self.spaceName = spaceName
         self.note = note
         self.status = status
-        self.searchText = ClipItem.composeSearchText(title: title, domain: domain, excerpt: excerpt, content: content, category: category, tags: tags, note: note)
+        self.searchText = ClipItem.composeSearchText(title: title, domain: domain, excerpt: excerpt, content: content, category: category, tags: tags, spaceName: spaceName, note: note)
     }
 
     public init(row: Row) {
@@ -482,6 +575,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         aiSummary = row["ai_summary"] ?? ""
         category = row["category"] ?? ""
         tags = decodeStringArray(row["tags_json"] ?? "[]")
+        spaceID = row["space_id"]
+        spaceName = row["space_name"] ?? ""
         note = row["note"] ?? ""
         status = ClipStatus(rawValue: row["status"] ?? "") ?? .inbox
         searchText = row["search_text"] ?? ""
@@ -501,6 +596,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         container["ai_summary"] = aiSummary
         container["category"] = category
         container["tags_json"] = encodeStringArray(tags)
+        container["space_id"] = spaceID
+        container["space_name"] = spaceName
         container["note"] = note
         container["status"] = status.rawValue
         container["search_text"] = searchText
@@ -514,6 +611,7 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
             content: content,
             category: category,
             tags: tags,
+            spaceName: spaceName,
             note: note
         )
     }
@@ -525,9 +623,10 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         content: String,
         category: String,
         tags: [String],
+        spaceName: String,
         note: String
     ) -> String {
-        [title, domain, excerpt, content, category, tags.joined(separator: " "), note]
+        [title, domain, excerpt, content, category, tags.joined(separator: " "), spaceName, note]
             .joined(separator: " ")
             .lowercased()
     }

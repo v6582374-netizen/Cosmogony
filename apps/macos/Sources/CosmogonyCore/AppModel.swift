@@ -7,11 +7,14 @@ public final class AppModel: ObservableObject {
     @Published public var providerProfiles: [ProviderProfile]
     @Published public var providerSecrets: [String: String]
     @Published public var categoryRules: [CategoryRule]
+    @Published public var spaces: [Space]
     @Published public var clips: [ClipItem] = []
     @Published public var selectedScope: ClipScope = .all
     @Published public var selectedPlatform: PlatformFilter = .all
+    @Published public var selectedSpaceID: String?
     @Published public var timeboxDraft = TimeboxDraft.today()
     @Published public var searchText = ""
+    @Published public var captureTagDraft = ""
     @Published public var selectedClipID: String?
     @Published public var statusMessage = "Ready."
     @Published public var bridgeStatus = "Bridge offline"
@@ -19,6 +22,9 @@ public final class AppModel: ObservableObject {
     @Published public var stats = ClipStats()
     @Published public var providerProbeMessages: [String: String] = [:]
     @Published public var providerProbeRunning = Set<String>()
+    @Published public var selectedSettingsTab: SettingsTab = .appearance
+    @Published public var activeOverlay: AppOverlay?
+    @Published public var summaryGenerationRunning = Set<String>()
 
     let database: AppDatabase
     private let keychain = KeychainStore()
@@ -29,6 +35,7 @@ public final class AppModel: ObservableObject {
     private let hotKeys = HotKeyCenter()
     private let launchAtLogin = LaunchAtLoginController()
     private let providerProbe = ProviderProbeService()
+    private let aiSummaryService = AISummaryService()
     private let keychainService = "Cosmogony.ProviderSecrets"
 
     public static func bootstrap() -> AppModel {
@@ -44,6 +51,7 @@ public final class AppModel: ObservableObject {
         settings = try database.fetchSettings()
         providerProfiles = try database.fetchProviderProfiles()
         categoryRules = try database.fetchCategoryRules()
+        spaces = try database.fetchSpaces()
         providerSecrets = [:]
 
         for profile in providerProfiles {
@@ -72,6 +80,7 @@ public final class AppModel: ObservableObject {
         clips = try database.fetchClips(
             scope: selectedScope,
             platformFilter: selectedPlatform,
+            spaceID: selectedSpaceID,
             timebox: timeboxDraft.filter,
             search: searchText,
             settings: settings,
@@ -99,9 +108,32 @@ public final class AppModel: ObservableObject {
     public func resetPrimaryFilters() {
         selectedScope = .all
         selectedPlatform = .all
+        selectedSpaceID = nil
         searchText = ""
         timeboxDraft = .today()
         refreshFilters()
+    }
+
+    public func focusPlatform(_ filter: PlatformFilter) {
+        selectedPlatform = filter
+    }
+
+    public func focusSpace(_ id: String?) {
+        selectedSpaceID = id
+    }
+
+    public func presentClipDetail(_ clip: ClipItem) {
+        selectedClipID = clip.id
+        activeOverlay = .clipDetail
+        refreshAISummary(for: clip.id)
+    }
+
+    public func closeOverlay() {
+        activeOverlay = nil
+    }
+
+    public func clearSearch() {
+        searchText = ""
     }
 
     public func captureCurrentPage() {
@@ -137,6 +169,8 @@ public final class AppModel: ObservableObject {
         let rawText = payload.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = rawText.count > 72 ? String(rawText.prefix(72)) + "..." : rawText
         let url = URL(string: rawText)?.absoluteString ?? "clipboard://local"
+        let tag = normalizedCaptureTag
+        let assignedSpace = resolveSpace(for: tag)
         var clip = ClipItem(
             sourceType: .clipboard,
             url: url,
@@ -149,7 +183,9 @@ public final class AppModel: ObservableObject {
             content: String(rawText.prefix(settings.capture.maxStoredCharacters)),
             aiSummary: compactSummary(from: rawText),
             category: payload.sourceApplication ?? "Clipboard",
-            tags: [],
+            tags: tag.isEmpty ? [] : [tag],
+            spaceID: assignedSpace?.id,
+            spaceName: assignedSpace?.name ?? "",
             note: "",
             status: .inbox
         )
@@ -164,6 +200,8 @@ public final class AppModel: ObservableObject {
         let bucket = PlatformClassifier.bucket(for: url)
         let seedContent = String(content.prefix(settings.capture.maxStoredCharacters))
         let seedExcerpt = excerpt.isEmpty ? compactSummary(from: seedContent) : excerpt
+        let tag = normalizedCaptureTag
+        let assignedSpace = resolveSpace(for: tag)
 
         var clip = ClipItem(
             sourceType: .webPage,
@@ -177,7 +215,9 @@ public final class AppModel: ObservableObject {
             content: seedContent,
             aiSummary: compactSummary(from: seedExcerpt.isEmpty ? title : seedExcerpt),
             category: categorySuggestion(for: bucket, domain: domain),
-            tags: [],
+            tags: tag.isEmpty ? [] : [tag],
+            spaceID: assignedSpace?.id,
+            spaceName: assignedSpace?.name ?? "",
             note: "",
             status: .inbox
         )
@@ -238,6 +278,9 @@ public final class AppModel: ObservableObject {
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
+            let assignedSpace = resolveSpace(forTags: clip.tags)
+            clip.spaceID = assignedSpace?.id
+            clip.spaceName = assignedSpace?.name ?? ""
             clip.note = note
             clip.status = status
             clip.refreshSearchText()
@@ -307,10 +350,10 @@ public final class AppModel: ObservableObject {
         }
     }
 
-    public func testProviderConnection(_ profile: ProviderProfile) {
+    public func testProviderConnection(_ profile: ProviderProfile, apiKeyOverride: String? = nil) {
         providerProbeRunning.insert(profile.id)
         providerProbeMessages[profile.id] = "Testing..."
-        let secret = providerSecrets[profile.id] ?? ""
+        let secret = (apiKeyOverride ?? providerSecrets[profile.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
         Task {
             let result = await providerProbe.probe(profile: profile, apiKey: secret)
@@ -355,6 +398,38 @@ public final class AppModel: ObservableObject {
         }
     }
 
+    public func addSpace(name: String, tagsText: String) {
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedName.isEmpty else { return }
+        let tags = tagsText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        let space = Space(name: normalizedName, tags: tags)
+        do {
+            try database.saveSpace(space)
+            spaces = try database.fetchSpaces()
+            statusMessage = "Space created."
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
+    public func deleteSpace(_ space: Space) {
+        do {
+            try database.deleteSpace(id: space.id)
+            spaces = try database.fetchSpaces()
+            if selectedSpaceID == space.id {
+                selectedSpaceID = nil
+            }
+            try reloadClips()
+            try reloadStats()
+            statusMessage = "Space deleted."
+        } catch {
+            statusMessage = error.localizedDescription
+        }
+    }
+
     public func updateDefaultReasoningProfile(_ id: String) {
         settings.defaultReasoningProfileID = id
         saveSettingsOnly()
@@ -388,6 +463,11 @@ public final class AppModel: ObservableObject {
         settings.appearance = appearance
         saveSettingsOnly()
         statusMessage = "Appearance updated."
+    }
+
+    public func openSettingsTab(_ tab: SettingsTab) {
+        selectedSettingsTab = tab
+        activeOverlay = .settings
     }
 
     public func updateOpenAtLogin(_ enabled: Bool) {
@@ -482,6 +562,9 @@ public final class AppModel: ObservableObject {
             if let profiles = try? database.fetchProviderProfiles() {
                 providerProfiles = profiles
             }
+            if let spaces = try? database.fetchSpaces() {
+                self.spaces = spaces
+            }
             if let stats = try? database.fetchStats(timebox: timeboxDraft.filter) {
                 self.stats = stats
             }
@@ -514,5 +597,84 @@ public final class AppModel: ObservableObject {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(urlString, forType: .string)
         statusMessage = "URL copied."
+    }
+
+    public func updateSelectedClipStatus(_ status: ClipStatus) {
+        guard let clip = selectedClip else { return }
+        saveClipEdits(
+            id: clip.id,
+            category: clip.category,
+            tagsText: clip.tags.joined(separator: ", "),
+            note: clip.note,
+            status: status
+        )
+    }
+
+    public func refreshAISummary(for id: String) {
+        guard !summaryGenerationRunning.contains(id) else { return }
+        guard let clip = try? database.fetchClip(id: id) else { return }
+        guard let profile = preferredSummaryProfile(), let apiKey = providerSecrets[profile.id], !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        summaryGenerationRunning.insert(id)
+        Task {
+            do {
+                let result = try await aiSummaryService.summarizeChinese(clip: clip, profile: profile, apiKey: apiKey)
+                await MainActor.run {
+                    self.summaryGenerationRunning.remove(id)
+                    self.persistAISummary(id: id, summary: result.summary)
+                    self.statusMessage = "AI summary refreshed."
+                }
+            } catch {
+                await MainActor.run {
+                    self.summaryGenerationRunning.remove(id)
+                    self.statusMessage = "AI summary failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private var normalizedCaptureTag: String {
+        captureTagDraft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func resolveSpace(for tag: String) -> Space? {
+        guard !tag.isEmpty else { return nil }
+        return spaces.first { space in
+            space.tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame })
+        }
+    }
+
+    private func resolveSpace(forTags tags: [String]) -> Space? {
+        for tag in tags {
+            if let matched = resolveSpace(for: tag.lowercased()) {
+                return matched
+            }
+        }
+        return nil
+    }
+
+    private func preferredSummaryProfile() -> ProviderProfile? {
+        if let deepSeek = providerProfiles.first(where: { $0.kind == .deepseek && $0.enabled && !(providerSecrets[$0.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+            return deepSeek
+        }
+        if let defaultID = settings.defaultReasoningProfileID,
+           let profile = providerProfiles.first(where: { $0.id == defaultID && $0.enabled && !(providerSecrets[$0.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+            return profile
+        }
+        return providerProfiles.first(where: { $0.enabled && !(providerSecrets[$0.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+    }
+
+    private func persistAISummary(id: String, summary: String) {
+        do {
+            guard var clip = try database.fetchClip(id: id) else { return }
+            clip.aiSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+            clip.refreshSearchText()
+            try database.saveClip(clip)
+            try reloadClips()
+        } catch {
+            statusMessage = "Saving AI summary failed: \(error.localizedDescription)"
+        }
     }
 }

@@ -6,6 +6,7 @@ import ServiceManagement
 struct ExportEnvelope: Codable, Sendable {
     var items: [ClipItem]
     var categoryRules: [CategoryRule]
+    var spaces: [Space]
 }
 
 private struct SettingsRow: Codable, FetchableRecord, PersistableRecord {
@@ -125,6 +126,20 @@ final class AppDatabase {
                 table.column("value_json", .text).notNull()
             }
         }
+        migrator.registerMigration("v2_spaces") { db in
+            try db.create(table: "spaces") { table in
+                table.column("id", .text).primaryKey()
+                table.column("name", .text).notNull()
+                table.column("tags_json", .text).notNull().defaults(to: "[]")
+                table.column("created_at", .double).notNull()
+                table.column("updated_at", .double).notNull()
+            }
+
+            try db.alter(table: "clip_items") { table in
+                table.add(column: "space_id", .text)
+                table.add(column: "space_name", .text).notNull().defaults(to: "")
+            }
+        }
         return migrator
     }
 
@@ -144,6 +159,21 @@ final class AppDatabase {
             nextSettings.defaultReasoningProfileID = defaultProfile.id
             nextSettings.defaultEmbeddingProfileID = defaultProfile.id
             try saveSettings(nextSettings)
+        }
+
+        let profiles = try fetchProviderProfiles()
+        if !profiles.contains(where: { $0.id == "deepseek-local-test" }) {
+            let deepSeekProfile = ProviderProfile(
+                id: "deepseek-local-test",
+                kind: .deepseek,
+                displayName: "DeepSeek Local Test",
+                apiKeyRef: "deepseek.local.test",
+                baseURL: ProviderKind.deepseek.suggestedBaseURL,
+                defaultModel: "deepseek-chat",
+                embeddingModel: "",
+                enabled: true
+            )
+            try saveProviderProfile(deepSeekProfile)
         }
 
         try ensureSeedClips()
@@ -204,15 +234,34 @@ final class AppDatabase {
         }
     }
 
+    func fetchSpaces() throws -> [Space] {
+        try dbQueue.read { db in
+            try Space.fetchAll(db).sorted { $0.updatedAt > $1.updatedAt }
+        }
+    }
+
     func saveCategoryRule(_ rule: CategoryRule) throws {
         try dbQueue.write { db in
             try rule.save(db)
         }
     }
 
+    func saveSpace(_ space: Space) throws {
+        try dbQueue.write { db in
+            try space.save(db)
+        }
+    }
+
     func deleteCategoryRule(id: String) throws {
         try dbQueue.write { db in
             _ = try CategoryRule.deleteOne(db, key: id)
+        }
+    }
+
+    func deleteSpace(id: String) throws {
+        try dbQueue.write { db in
+            _ = try Space.deleteOne(db, key: id)
+            try db.execute(sql: "UPDATE clip_items SET space_id = NULL, space_name = '' WHERE space_id = ?", arguments: [id])
         }
     }
 
@@ -237,6 +286,7 @@ final class AppDatabase {
     func fetchClips(
         scope: ClipScope,
         platformFilter: PlatformFilter,
+        spaceID: String?,
         timebox: TimeboxFilter,
         search: String,
         settings: AppSettings,
@@ -247,6 +297,8 @@ final class AppDatabase {
             var clips = try ClipItem.fetchAll(db)
             clips = clips.filter { clip in
                 switch scope {
+                case .all:
+                    clip.status != .trashed
                 case .inbox:
                     clip.status == .inbox
                 case .library:
@@ -263,6 +315,10 @@ final class AppDatabase {
                 case let .bucket(bucket):
                     clip.platformBucket == bucket
                 }
+            }
+
+            if let spaceID, !spaceID.isEmpty {
+                clips = clips.filter { $0.spaceID == spaceID }
             }
 
             clips = clips.filter { timebox.contains($0.capturedAt) }
@@ -308,7 +364,8 @@ final class AppDatabase {
             try ClipItem.fetchAll(db)
         }
         let rules = try fetchCategoryRules()
-        let payload = ExportEnvelope(items: items, categoryRules: rules)
+        let spaces = try fetchSpaces()
+        let payload = ExportEnvelope(items: items, categoryRules: rules, spaces: spaces)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -625,6 +682,224 @@ private enum SeedLibrary {
             summary: "Wikipedia 首页，补充知识型、目录型网页的代表样例。",
             category: "Knowledge",
             tags: ["web", "wikipedia", "reference"]
+        ),
+
+        // Curated built-in links
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "Neurodivergent by Design: Using AI to Honor and Support Learning Differences",
+            url: "https://www.intechopen.com/online-first/1230197",
+            summary: "IntechOpen 的 AI 与学习差异研究文章，适合归档学术研究与教育科技类内容。",
+            category: "学术研究",
+            tags: ["research", "ai", "education", "neurodiversity"]
+        ),
+        SeedClipDefinition(
+            bucket: .wechat,
+            title: "微信公众号文章",
+            url: "https://mp.weixin.qq.com/s/pdZBFWcdxtYea39o-iPLrg",
+            summary: "来自微信公众号的中文长文链接，用于归档公众号内容与中文信息流样例。",
+            category: "微信公众号",
+            tags: ["wechat", "article", "longread", "chinese"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "Zolplay Work",
+            url: "https://zolplay.com/zh-CN/work",
+            summary: "Zolplay 的作品集页面，适合整理工作室案例、产品设计与品牌展示类链接。",
+            category: "作品集",
+            tags: ["portfolio", "studio", "design", "zolplay"]
+        ),
+        SeedClipDefinition(
+            bucket: .xPosts,
+            title: "Edward Luo on X - Vibe Island",
+            url: "https://x.com/imedwardluo/status/2039266737263349870",
+            summary: "Edward Luo 分享的 Vibe Island Mac 动态岛应用帖子，适合归档产品想法与 AI 原生应用观察。",
+            category: "X 动态",
+            tags: ["x", "ai", "mac", "product", "vibe-island"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "ebook-GPT-translator README-zh",
+            url: "https://github.com/jesselau76/ebook-GPT-translator/blob/main/README-zh.md",
+            summary: "电子书 GPT 翻译工具的中文说明文档，适合收录阅读工具与开源项目资料。",
+            category: "GitHub 项目",
+            tags: ["github", "ebook", "translation", "gpt", "tool"]
+        ),
+        SeedClipDefinition(
+            bucket: .youtube,
+            title: "mymind: Pinterest for Productivity Nerds",
+            url: "https://www.youtube.com/watch?v=YwKPw16FzNU",
+            summary: "关于 mymind 的 YouTube 视频，适合归档知识管理与效率产品相关视频内容。",
+            category: "视频",
+            tags: ["youtube", "productivity", "knowledge-management", "mymind"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "Bitcoin rainbow chart shows price is now below",
+            url: "https://www.reddit.com/r/wallstreetbets/comments/1s6dc58/bitcoin_rainbow_chart_shows_price_is_now_below/",
+            summary: "WallStreetBets 里的比特币彩虹图讨论串，适合归档市场情绪与社区讨论样例。",
+            category: "Reddit 讨论",
+            tags: ["reddit", "bitcoin", "market", "community", "wallstreetbets"]
+        ),
+        SeedClipDefinition(
+            bucket: .xPosts,
+            title: "数字生命卡兹克 on X",
+            url: "https://x.com/khazix0918/status/2038828707247485041?s=12",
+            summary: "来自数字生命卡兹克的 X 帖子，适合归档短链分享与 AI 社区动态类内容。",
+            category: "X 动态",
+            tags: ["x", "share", "ai", "community", "khazix"]
+        ),
+        SeedClipDefinition(
+            bucket: .xPosts,
+            title: "WquGuru on X - Claude Code and Codex book thread",
+            url: "https://x.com/wquguru/status/2039333332987810103?s=12",
+            summary: "WquGuru 分享 Claude Code 与 Codex 相关书单的帖子，适合归档开发工具与学习资料线索。",
+            category: "X 动态",
+            tags: ["x", "claude-code", "codex", "books", "learning"]
+        ),
+        SeedClipDefinition(
+            bucket: .xPosts,
+            title: "宝玉 on X - codex-plugin-cc",
+            url: "https://x.com/dotey/status/2038682622180634793?s=12",
+            summary: "宝玉转发 OpenAI codex-plugin-cc 相关动态，适合归档 AI 编码插件与工作流更新。",
+            category: "X 动态",
+            tags: ["x", "openai", "codex", "plugin", "claude-code"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "Quick Start - Wiki | EvoMap",
+            url: "https://evomap.ai/wiki/01-quick-start",
+            summary: "EvoMap 的快速开始文档，适合作为 Agent 地图、知识组织与产品上手资料样例。",
+            category: "产品文档",
+            tags: ["docs", "agent", "knowledge-map", "quick-start", "evomap"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "Juchats - Address user needs using natural language",
+            url: "https://celhive.ai/",
+            summary: "Celhive 首页，展示以自然语言满足用户需求的 AI 产品方向。",
+            category: "AI 工具",
+            tags: ["ai", "assistant", "product", "workflow", "celhive"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "Step1 - Clone Any Website & Ship Designer-Level Sites With AI",
+            url: "https://step1.dev/",
+            summary: "Step1 的 AI 建站产品页面，适合归档设计生成与前端生产力工具链接。",
+            category: "AI 建站",
+            tags: ["ai", "web-builder", "design", "frontend", "step1"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "BenchFlow - High Signal Environments for Agents",
+            url: "https://www.benchflow.ai/",
+            summary: "BenchFlow 提供面向 Agent 的高信号测试环境，适合收录评测与实验平台资料。",
+            category: "Agent 基准",
+            tags: ["agent", "benchmark", "evaluation", "testing", "benchflow"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "Kindle 图书资源 - 书伴",
+            url: "https://bookfere.com/ebook",
+            summary: "书伴的 Kindle 图书资源页面，适合归档电子书与阅读资源相关链接。",
+            category: "阅读资源",
+            tags: ["ebook", "kindle", "reading", "resource", "bookfere"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "Agentic AI and the next intelligence explosion",
+            url: "https://www.science.org/doi/10.1126/science.aeg1895",
+            summary: "Science 上关于 Agentic AI 的文章，适合归档前沿研究与趋势判断类资料。",
+            category: "学术研究",
+            tags: ["research", "agentic-ai", "science", "paper", "trend"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "gstack",
+            url: "https://github.com/garrytan/gstack",
+            summary: "Garry Tan 的 Claude Code 配置与工具集合，适合归档 AI 编码工作流项目。",
+            category: "GitHub 项目",
+            tags: ["github", "claude-code", "workflow", "tools", "gstack"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "sub2api",
+            url: "https://github.com/Wei-Shaw/sub2api",
+            summary: "Sub2API 开源中转服务项目，适合收录多模型统一接入与 API 中台方案。",
+            category: "GitHub 项目",
+            tags: ["github", "api", "gateway", "llm", "sub2api"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "BotLearn - Send Your AI Agents to School",
+            url: "https://www.botlearn.ai/7-step",
+            summary: "BotLearn 的 7-step 页面，适合归档 Agent 训练、教学与任务设计类内容。",
+            category: "Agent 学习",
+            tags: ["agent", "training", "education", "workflow", "botlearn"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "2026 开源AI书签系统：MindPocket 私有部署 RAG 知识库",
+            url: "https://www.ahhhhfs.com/79608/",
+            summary: "A姐分享的 MindPocket 文章，适合收录书签系统、RAG 与私有知识库相关资料。",
+            category: "书签系统",
+            tags: ["bookmark", "rag", "knowledge-base", "self-hosted", "mindpocket"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "BotCord - Discord for Bots",
+            url: "https://www.botcord.chat/",
+            summary: "BotCord 的产品主页，适合归档 Bot 协作与社区基础设施类项目。",
+            category: "Bot 社区",
+            tags: ["bot", "community", "chat", "infrastructure", "botcord"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "MCP is Dead; Long Live MCP!",
+            url: "https://chrlschn.dev/blog/2026/03/mcp-is-dead-long-live-mcp/",
+            summary: "关于 MCP 未来形态的博客文章，适合归档协议、Agent 架构与技术观点讨论。",
+            category: "技术博客",
+            tags: ["mcp", "agent", "protocol", "blog", "architecture"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "I was backend lead at Manus. After building agents for 2 years, I stopped using function calling entirely.",
+            url: "https://www.reddit.com/r/LocalLLaMA/comments/1rrisqn/i_was_backend_lead_at_manus_after_building_agents/",
+            summary: "LocalLLaMA 上关于 Agent 工程实践的讨论串，适合归档经验分享与架构观点。",
+            category: "Reddit 讨论",
+            tags: ["reddit", "agent", "manus", "function-calling", "engineering"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "Whitespace Control - Templater",
+            url: "https://silentvoid13.github.io/Templater/commands/whitespace-control.html",
+            summary: "Templater 的空白字符控制文档页，适合收录 Obsidian 插件文档与模板技巧。",
+            category: "文档",
+            tags: ["docs", "obsidian", "templater", "plugin", "markdown"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "Beacon - Linear Client Portal for Studios",
+            url: "https://beacon.zolplay.co/",
+            summary: "Beacon 的产品主页，适合归档工作室客户门户、项目协同与 Linear 周边产品。",
+            category: "产品",
+            tags: ["product", "linear", "client-portal", "studio", "beacon"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "UDEMY FREE | Coursevania",
+            url: "https://t.me/Udemy4/78095",
+            summary: "Telegram 中的课程资源消息链接，用于归档 Telegram 社区内容入口。",
+            category: "Telegram",
+            tags: ["telegram", "course", "community", "resource", "udemy4"]
+        ),
+        SeedClipDefinition(
+            bucket: .otherWeb,
+            title: "Telegram Web - @piracy6",
+            url: "https://web.telegram.org/k/#@piracy6",
+            summary: "Telegram Web 中的频道入口链接，可作为外部社区链接的归档样例。",
+            category: "Telegram",
+            tags: ["telegram", "channel", "community", "web"]
         )
     ]
 }

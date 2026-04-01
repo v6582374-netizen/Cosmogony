@@ -33,7 +33,7 @@ struct CardSurface<Content: View>: View {
     var body: some View {
         content
             .padding(20)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .fill(
@@ -52,6 +52,34 @@ struct CardSurface<Content: View>: View {
                     )
                     .shadow(color: CosmoPalette.shadow, radius: 18, x: 0, y: 14)
             )
+    }
+}
+
+private struct SidebarSection<Content: View>: View {
+    let title: String
+    let subtitle: String?
+    @ViewBuilder var content: Content
+
+    init(title: String, subtitle: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.subtitle = subtitle
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(CosmoPalette.ink)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(CosmoPalette.textSecondary)
+                }
+            }
+            content
+        }
     }
 }
 
@@ -144,6 +172,25 @@ private struct FilterChipStyle: ButtonStyle {
     }
 }
 
+private struct SidebarButtonStyle: ButtonStyle {
+    var selected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(selected ? CosmoPalette.chipSelectedText : CosmoPalette.ink)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(selected ? CosmoPalette.chipSelectedFill : CosmoPalette.surfaceSoft)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(selected ? CosmoPalette.chipSelectedStroke : CosmoPalette.line, lineWidth: 1)
+                    )
+            )
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.spring(response: 0.22, dampingFraction: 0.82), value: configuration.isPressed)
+    }
+}
+
 private struct SearchField: View {
     @Binding var text: String
 
@@ -165,6 +212,31 @@ private struct SearchField: View {
                         .strokeBorder(CosmoPalette.line, lineWidth: 1)
                 )
         )
+    }
+}
+
+private struct FlowTagList: View {
+    let tags: [String]
+    @Binding var selectedTag: String
+
+    private let columns = [GridItem(.adaptive(minimum: 90), spacing: 8)]
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+            ForEach(tags, id: \.self) { tag in
+                Button {
+                    selectedTag = tag
+                } label: {
+                    Text(tag)
+                        .font(.caption.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .contentShape(Capsule(style: .continuous))
+                }
+                .buttonStyle(FilterChipStyle(selected: selectedTag.caseInsensitiveCompare(tag) == .orderedSame))
+            }
+        }
     }
 }
 
@@ -249,41 +321,7 @@ private struct PlatformShelfCard: View {
                             Button {
                                 onSelectClip(clip)
                             } label: {
-                                HStack(alignment: .top, spacing: 12) {
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .fill(bucketAccent(bucket).opacity(0.18))
-                                        .frame(width: 54, height: 54)
-                                        .overlay(
-                                            Image(systemName: bucketIcon(bucket))
-                                                .font(.title3)
-                                                .foregroundStyle(bucketAccent(bucket))
-                                        )
-
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        HStack(alignment: .firstTextBaseline) {
-                                            Text(clip.title)
-                                                .font(.headline)
-                                                .foregroundStyle(CosmoPalette.ink)
-                                                .lineLimit(2)
-                                            Spacer(minLength: 10)
-                                            Text(clip.capturedAt.formatted(date: .omitted, time: .shortened))
-                                                .font(.caption)
-                                                .foregroundStyle(CosmoPalette.textSecondary)
-                                        }
-
-                                        Text(clip.domain)
-                                            .font(.caption.weight(.medium))
-                                            .foregroundStyle(CosmoPalette.moss)
-
-                                        Text(clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary)
-                                            .font(.subheadline)
-                                            .foregroundStyle(CosmoPalette.textSecondary)
-                                            .lineLimit(2)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(14)
-                                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                ClipStripRow(clip: clip, selected: false)
                             }
                             .buttonStyle(ClipCardButtonStyle(selected: false))
                         }
@@ -408,46 +446,170 @@ private struct ClipCanvasCard: View {
     }
 }
 
+private struct ClipStripRow: View {
+    let clip: ClipItem
+    let selected: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(accent.opacity(0.16))
+                .frame(width: 50, height: 50)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.title3)
+                        .foregroundStyle(accent)
+                )
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(clip.title)
+                        .font(.headline)
+                        .foregroundStyle(CosmoPalette.ink)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(clip.capturedAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundStyle(CosmoPalette.textSecondary)
+                }
+
+                HStack(spacing: 8) {
+                    Text(clip.platformBucket.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(accent)
+                    Text(clip.domain)
+                        .font(.caption)
+                        .foregroundStyle(CosmoPalette.textSecondary)
+                    if !clip.spaceName.isEmpty {
+                        Text("• \(clip.spaceName)")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(CosmoPalette.moss)
+                    }
+                }
+
+                Text(clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary)
+                    .font(.subheadline)
+                    .foregroundStyle(CosmoPalette.textSecondary)
+                    .lineLimit(2)
+            }
+
+            if selected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(CosmoPalette.moss)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private var accent: Color {
+        switch clip.platformBucket {
+        case .xPosts:
+            return Color(red: 0.28, green: 0.36, blue: 0.49)
+        case .rednote:
+            return Color(red: 0.80, green: 0.39, blue: 0.40)
+        case .wechat:
+            return Color(red: 0.31, green: 0.56, blue: 0.34)
+        case .douyin:
+            return Color(red: 0.28, green: 0.54, blue: 0.58)
+        case .youtube:
+            return Color(red: 0.82, green: 0.24, blue: 0.22)
+        case .otherWeb:
+            return CosmoPalette.clay
+        }
+    }
+
+    private var icon: String {
+        switch clip.platformBucket {
+        case .xPosts:
+            return "text.bubble"
+        case .rednote:
+            return "heart.text.square"
+        case .wechat:
+            return "bubble.left.and.bubble.right"
+        case .douyin:
+            return "play.tv"
+        case .youtube:
+            return "play.rectangle"
+        case .otherWeb:
+            return "globe"
+        }
+    }
+}
+
+private struct SettingsSidebarButtonStyle: ButtonStyle {
+    var selected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(selected ? CosmoPalette.chipSelectedText : CosmoPalette.ink)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(selected ? CosmoPalette.chipSelectedFill : CosmoPalette.surfaceSoft)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(selected ? CosmoPalette.chipSelectedStroke : CosmoPalette.line, lineWidth: 1)
+                    )
+            )
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.spring(response: 0.22, dampingFraction: 0.82), value: configuration.isPressed)
+    }
+}
+
 public struct RootView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var inspectorPane = 0
+    @State private var spaceNameDraft = ""
+    @State private var spaceTagsDraft = ""
 
     private let filters: [PlatformFilter] = [.all] + PlatformBucket.allCases.map(PlatformFilter.bucket)
-    private let shelfColumns = [GridItem(.adaptive(minimum: 310, maximum: 440), spacing: 18)]
-    private let clipColumns = [GridItem(.adaptive(minimum: 250, maximum: 340), spacing: 18)]
 
     public init() {}
 
-    private var groupedClips: [PlatformBucket: [ClipItem]] {
-        Dictionary(grouping: model.clips, by: \.platformBucket)
+    private var canvasHeadline: String {
+        switch model.timeboxDraft.filter {
+        case let .day(day) where Calendar.current.isDateInToday(day):
+            return "Today's Clips"
+        default:
+            return "Matching Clips"
+        }
     }
 
-    private var visibleBuckets: [PlatformBucket] {
-        if let bucket = model.selectedPlatform.bucket {
-            return [bucket]
+    private var canvasSubheadline: String {
+        switch model.timeboxDraft.filter {
+        case let .day(day) where Calendar.current.isDateInToday(day):
+            return "主界面默认展示今天收进来的全部剪藏，便于先完成当天的信息归拢。"
+        default:
+            return "当前全局视图命中的内容会在这里展开，侧边栏可以调整更高阶的显示范围。"
         }
-        return PlatformBucket.allCases
     }
 
     public var body: some View {
         ZStack {
             SoftBackground()
 
-            VStack(spacing: 18) {
-                header
-                controlsPanel
-                statsRow
-
+            ScrollView {
                 HStack(alignment: .top, spacing: 18) {
-                    contentCanvas
-                    inspectorPaneView
+                    sidebarPaneView
+                    VStack(spacing: 18) {
+                        header
+                        contentCanvas
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
+                .padding(22)
             }
-            .padding(22)
+
+            if let activeOverlay = model.activeOverlay {
+                overlayBackdrop(activeOverlay)
+            }
         }
-        .frame(minWidth: 1320, minHeight: 860)
+        .frame(minWidth: 1060, minHeight: 820)
         .onChange(of: model.selectedScope) { _, _ in model.refreshFilters() }
         .onChange(of: model.selectedPlatform) { _, _ in model.refreshFilters() }
+        .onChange(of: model.selectedSpaceID) { _, _ in model.refreshFilters() }
         .onChange(of: model.searchText) { _, _ in model.refreshFilters() }
         .onChange(of: model.timeboxDraft) { _, _ in model.refreshFilters() }
     }
@@ -465,197 +627,386 @@ public struct RootView: View {
                     HStack(spacing: 10) {
                         InfoBadge(title: "Bridge", value: model.bridgeStatus)
                         InfoBadge(title: "Status", value: model.statusMessage)
+                        InfoBadge(title: "Search", value: model.searchText.isEmpty ? "Idle" : model.searchText)
+                        if !model.captureTagDraft.isEmpty {
+                            InfoBadge(title: "Capture Tag", value: model.captureTagDraft)
+                        }
                     }
                 }
 
                 Spacer(minLength: 16)
 
                 VStack(alignment: .trailing, spacing: 12) {
-                    HStack(spacing: 10) {
-                        SettingsLink {
-                            Label("Settings", systemImage: "gearshape")
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
-
-                        Button {
-                            model.captureClipboard()
-                        } label: {
-                            Label("Capture Clipboard", systemImage: "doc.on.clipboard")
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
-
-                        Button {
-                            model.captureCurrentPage()
-                        } label: {
-                            Label("Capture Current Page", systemImage: "safari")
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 12)
-                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
-                    }
-
-                    Text("灵感不再淹没在表格里，而是先以平台分区展示，再进入深度检索。")
+                    Text(model.selectedPlatform.label)
+                        .font(.system(size: 30, weight: .semibold, design: .serif))
+                        .foregroundStyle(CosmoPalette.ink)
+                    Text("大量剪藏先汇入今天的列表，再按 space、tag 和筛选条件继续收束。")
                         .font(.subheadline)
                         .foregroundStyle(CosmoPalette.textSecondary)
                 }
             }
         }
-        .frame(height: 162)
+        .frame(minHeight: 158)
     }
 
-    private var controlsPanel: some View {
+    private var sidebarPaneView: some View {
         CardSurface {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .center, spacing: 14) {
-                    Picker("Scope", selection: $model.selectedScope) {
-                        ForEach(ClipScope.allCases) { scope in
-                            Text(scope.title).tag(scope)
+            VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Sidebar")
+                        .font(.system(size: 26, weight: .semibold, design: .serif))
+                        .foregroundStyle(CosmoPalette.ink)
+                    Text("统计、检索、范围控制和设置入口都集中在这里，主内容区只负责展示结果。")
+                        .font(.subheadline)
+                        .foregroundStyle(CosmoPalette.textSecondary)
+                }
+
+                SidebarSection(title: "Visible", subtitle: "这些统计现在固定放在侧边栏纵向展示。") {
+                    VStack(spacing: 10) {
+                        StatPill(title: "Visible", value: "\(model.clips.count)")
+                        StatPill(title: "Inbox", value: "\(model.stats.inboxCount)")
+                        StatPill(title: "Library", value: "\(model.stats.libraryCount)")
+                        StatPill(title: "Failed", value: "\(model.stats.failedCount)")
+                        StatPill(title: "Trash", value: "\(model.stats.trashCount)")
+                    }
+                }
+
+                Divider()
+                    .overlay(CosmoPalette.line)
+
+                SidebarSection(title: "Search", subtitle: "所有搜索与重置操作都直接生效。") {
+                    SearchField(text: $model.searchText)
+                    HStack(spacing: 10) {
+                        Button {
+                            model.clearSearch()
+                        } label: {
+                            Label("Clear Search", systemImage: "xmark.circle")
+                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+
+                        Button {
+                            model.resetPrimaryFilters()
+                        } label: {
+                            Label("Reset To Today", systemImage: "arrow.counterclockwise")
+                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
+                    }
+                }
+
+                Divider()
+                    .overlay(CosmoPalette.line)
+
+                SidebarSection(title: "Spaces", subtitle: "创建自己的模块，并通过 tag 自动承接后续剪藏。") {
+                    VStack(spacing: 10) {
+                        Button {
+                            model.focusSpace(nil)
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("All Spaces")
+                                        .font(.headline)
+                                    Text("不过滤自定义 space")
+                                        .font(.caption)
+                                        .foregroundStyle(model.selectedSpaceID == nil ? CosmoPalette.chipSelectedText.opacity(0.82) : CosmoPalette.textSecondary)
+                                }
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        }
+                        .buttonStyle(SidebarButtonStyle(selected: model.selectedSpaceID == nil))
+
+                        ForEach(model.spaces) { space in
+                            Button {
+                                model.focusSpace(space.id)
+                                if let firstTag = space.tags.first {
+                                    model.captureTagDraft = firstTag
+                                }
+                            } label: {
+                                HStack(alignment: .top, spacing: 10) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(space.name)
+                                            .font(.headline)
+                                        Text(space.tags.joined(separator: ", "))
+                                            .font(.caption)
+                                            .foregroundStyle(model.selectedSpaceID == space.id ? CosmoPalette.chipSelectedText.opacity(0.82) : CosmoPalette.textSecondary)
+                                            .lineLimit(2)
+                                    }
+                                    Spacer()
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            }
+                            .buttonStyle(SidebarButtonStyle(selected: model.selectedSpaceID == space.id))
+                            .contextMenu {
+                                Button("Use First Tag For Capture") {
+                                    model.captureTagDraft = space.tags.first ?? ""
+                                }
+                                Button("Delete Space", role: .destructive) {
+                                    model.deleteSpace(space)
+                                }
+                            }
+                        }
+
+                        VStack(spacing: 8) {
+                            TextField("New space name", text: $spaceNameDraft)
+                                .textFieldStyle(.roundedBorder)
+                            TextField("Tags (comma separated)", text: $spaceTagsDraft)
+                                .textFieldStyle(.roundedBorder)
+                            Button {
+                                model.addSpace(name: spaceNameDraft, tagsText: spaceTagsDraft)
+                                spaceNameDraft = ""
+                                spaceTagsDraft = ""
+                            } label: {
+                                Label("Create Space", systemImage: "plus")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 11)
+                                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 280)
+                }
 
-                    SearchField(text: $model.searchText)
+                Divider()
+                    .overlay(CosmoPalette.line)
 
-                    Text(model.searchMode.label)
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 9)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(CosmoPalette.gold.opacity(0.18))
-                        )
-                        .foregroundStyle(CosmoPalette.ink)
-
-                    TimeboxComposer(draft: $model.timeboxDraft)
-
+                SidebarSection(title: "Capture Tag", subtitle: "剪藏前先选择 tag，系统会自动分配到匹配该 tag 的 space。") {
+                    TextField("例如 design / research / inspiration", text: $model.captureTagDraft)
+                        .textFieldStyle(.roundedBorder)
+                    if !model.spaces.isEmpty {
+                        FlowTagList(tags: suggestedTags, selectedTag: $model.captureTagDraft)
+                    }
                     Button {
-                        model.selectedPlatform = .all
-                        model.selectedScope = .library
-                        model.searchText = ""
-                        model.timeboxDraft = TimeboxDraft()
-                        model.refreshFilters()
+                        model.captureTagDraft = ""
                     } label: {
-                        Label("Reset", systemImage: "arrow.counterclockwise")
+                        Label("Clear Capture Tag", systemImage: "xmark.circle")
+                            .frame(maxWidth: .infinity)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 11)
                             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                    .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surfaceSoft))
+                    .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
                 }
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
+                Divider()
+                    .overlay(CosmoPalette.line)
+
+                SidebarSection(title: "Quick Actions", subtitle: "原来很多没有落地的按钮，现在都接上了真实功能。") {
+                    VStack(spacing: 10) {
+                        Button {
+                            model.captureCurrentPage()
+                        } label: {
+                            Label("Capture Current Page", systemImage: "safari")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
+
+                        Button {
+                            model.captureClipboard()
+                        } label: {
+                            Label("Capture Clipboard", systemImage: "doc.on.clipboard")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+
+                        Button {
+                            model.openSelectedClipURL()
+                        } label: {
+                            Label("Open Selected URL", systemImage: "arrow.up.right.square")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                        .disabled(model.selectedClip?.url.hasPrefix("clipboard://") ?? true)
+
+                        Button {
+                            model.copySelectedClipURL()
+                        } label: {
+                            Label("Copy Selected URL", systemImage: "link")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                        .disabled(model.selectedClip == nil)
+
+                        HStack(spacing: 10) {
+                            Button("Inbox") {
+                                model.updateSelectedClipStatus(.inbox)
+                            }
+                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                            .disabled(model.selectedClip == nil)
+
+                            Button("Library") {
+                                model.updateSelectedClipStatus(.library)
+                            }
+                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                            .disabled(model.selectedClip == nil)
+
+                            Button("Trash") {
+                                model.updateSelectedClipStatus(.trashed)
+                            }
+                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                            .disabled(model.selectedClip == nil)
+                        }
+                    }
+                }
+
+                Divider()
+                    .overlay(CosmoPalette.line)
+
+                SidebarSection(title: "View Scope", subtitle: "切换当前视图包含哪些状态。") {
+                    VStack(spacing: 10) {
+                        ForEach(ClipScope.allCases) { scope in
+                            Button {
+                                model.selectedScope = scope
+                            } label: {
+                                HStack(alignment: .top, spacing: 10) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(scope.title)
+                                            .font(.headline)
+                                        Text(scopeDescription(scope))
+                                            .font(.caption)
+                                            .foregroundStyle(model.selectedScope == scope ? CosmoPalette.chipSelectedText.opacity(0.82) : CosmoPalette.textSecondary)
+                                    }
+                                    Spacer(minLength: 12)
+                                    if model.selectedScope == scope {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.title3)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 13)
+                                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            }
+                            .buttonStyle(SidebarButtonStyle(selected: model.selectedScope == scope))
+                        }
+                    }
+                }
+
+                Divider()
+                    .overlay(CosmoPalette.line)
+
+                SidebarSection(title: "Platforms", subtitle: "所有分类筛选都改成侧边栏纵向列表。") {
+                    VStack(spacing: 10) {
                         ForEach(filters.indices, id: \.self) { index in
                             let filter = filters[index]
-                            let title: String = switch filter {
-                            case .all: "全部"
-                            case let .bucket(bucket): bucket.title
-                            }
-                            let count: String = switch filter {
-                            case .all:
-                                "\(model.clips.count)"
-                            case let .bucket(bucket):
-                                "\(model.stats.bucketCounts[bucket, default: 0])"
-                            }
-
                             Button {
-                                model.selectedPlatform = filter
+                                model.focusPlatform(filter)
                             } label: {
-                                HStack(spacing: 8) {
-                                    Text(title)
-                                    Text(count)
+                                HStack(spacing: 10) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(filter.label)
+                                            .font(.headline)
+                                        Text(platformSubtitle(filter))
+                                            .font(.caption)
+                                            .foregroundStyle(filter == model.selectedPlatform ? CosmoPalette.chipSelectedText.opacity(0.82) : CosmoPalette.textSecondary)
+                                    }
+                                    Spacer()
+                                    Text(platformCount(filter))
                                         .font(.caption.weight(.semibold))
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 3)
+                                        .padding(.horizontal, 9)
+                                        .padding(.vertical, 5)
                                         .background(
                                             Capsule(style: .continuous)
                                                 .fill(filter == model.selectedPlatform ? CosmoPalette.chipSelectedStroke : CosmoPalette.gold.opacity(0.18))
                                         )
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .contentShape(Capsule(style: .continuous))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 13)
+                                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                             }
-                            .buttonStyle(FilterChipStyle(selected: filter == model.selectedPlatform))
+                            .buttonStyle(SidebarButtonStyle(selected: filter == model.selectedPlatform))
                         }
                     }
-                    .padding(.vertical, 2)
+                }
+
+                Divider()
+                    .overlay(CosmoPalette.line)
+
+                SidebarSection(title: "Timebox", subtitle: "整个 app 只保留一个外层滚动条，时间范围也放回侧边栏。") {
+                    TimeboxComposer(draft: $model.timeboxDraft)
+                }
+
+                Divider()
+                    .overlay(CosmoPalette.line)
+
+                SidebarSection(title: "Settings", subtitle: "这些按钮会直接打开对应设置页，而不是只做样子。") {
+                    VStack(spacing: 10) {
+                        ForEach(SettingsTab.allCases) { tab in
+                            Button {
+                                model.openSettingsTab(tab)
+                            } label: {
+                                Label(tab.title, systemImage: tab.systemImage)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
+                                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                            .buttonStyle(SurfaceButtonStyle(fill: model.selectedSettingsTab == tab ? CosmoPalette.chipSelectedFill : CosmoPalette.surface, foreground: model.selectedSettingsTab == tab ? CosmoPalette.chipSelectedText : CosmoPalette.ink, border: model.selectedSettingsTab == tab ? CosmoPalette.chipSelectedStroke : CosmoPalette.line))
+                        }
+                    }
                 }
             }
         }
-    }
-
-    private var statsRow: some View {
-        HStack(spacing: 12) {
-            StatPill(title: "Visible", value: "\(model.clips.count)")
-            StatPill(title: "Inbox", value: "\(model.stats.inboxCount)")
-            StatPill(title: "Library", value: "\(model.stats.libraryCount)")
-            StatPill(title: "Failed", value: "\(model.stats.failedCount)")
-            StatPill(title: "Trash", value: "\(model.stats.trashCount)")
-            StatPill(title: "Timebox", value: model.timeboxDraft.filter.summary)
-        }
+        .frame(minWidth: 280, idealWidth: 300, maxWidth: 320, alignment: .topLeading)
     }
 
     private var contentCanvas: some View {
         CardSurface {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Platform Shelves")
-                            .font(.system(size: 28, weight: .semibold, design: .serif))
-                            .foregroundStyle(CosmoPalette.ink)
-                        Text("每个平台先展示 3 个精选页面，下面再承接当前筛选命中的完整结果。")
-                            .font(.subheadline)
-                            .foregroundStyle(CosmoPalette.textSecondary)
+            VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(canvasHeadline)
+                        .font(.system(size: 24, weight: .semibold, design: .serif))
+                        .foregroundStyle(CosmoPalette.ink)
+                    Text(canvasSubheadline)
+                        .font(.subheadline)
+                        .foregroundStyle(CosmoPalette.textSecondary)
+                    if let selectedSpaceID = model.selectedSpaceID, let space = model.spaces.first(where: { $0.id == selectedSpaceID }) {
+                        Text("Current space filter: \(space.name)")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(CosmoPalette.moss)
                     }
+                }
 
-                    LazyVGrid(columns: shelfColumns, alignment: .leading, spacing: 18) {
-                        ForEach(visibleBuckets) { bucket in
-                            PlatformShelfCard(
-                                bucket: bucket,
-                                count: model.stats.bucketCounts[bucket, default: 0],
-                                clips: Array(groupedClips[bucket, default: []].prefix(3)),
-                                isSelected: model.selectedPlatform.bucket == bucket,
-                                onSelectBucket: { model.selectedPlatform = .bucket(bucket) },
-                                onSelectClip: { clip in model.selectedClipID = clip.id }
-                            )
-                        }
-                    }
-
-                    Divider()
-                        .overlay(CosmoPalette.line)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("All Matching Clips")
-                            .font(.system(size: 24, weight: .semibold, design: .serif))
-                            .foregroundStyle(CosmoPalette.ink)
-                        Text("当前检索、时间范围和平台筛选命中的所有内容都会以卡片形式呈现。")
-                            .font(.subheadline)
-                            .foregroundStyle(CosmoPalette.textSecondary)
-                    }
-
-                    if model.clips.isEmpty {
-                        ContentUnavailableView("No clips found", systemImage: "tray", description: Text("调整筛选条件，或先通过剪贴板 / 当前网页捕获内容。"))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 48)
-                    } else {
-                        LazyVGrid(columns: clipColumns, alignment: .leading, spacing: 18) {
-                            ForEach(model.clips) { clip in
-                                Button {
-                                    model.selectedClipID = clip.id
-                                } label: {
-                                    ClipCanvasCard(clip: clip, selected: model.selectedClipID == clip.id)
-                                }
-                                .buttonStyle(ClipCardButtonStyle(selected: model.selectedClipID == clip.id))
+                if model.clips.isEmpty {
+                    ContentUnavailableView("No clips found", systemImage: "tray", description: Text("调整筛选条件，或先通过剪贴板 / 当前网页捕获内容。"))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 48)
+                } else {
+                    LazyVStack(spacing: 12) {
+                        ForEach(model.clips) { clip in
+                            Button {
+                                model.presentClipDetail(clip)
+                            } label: {
+                                ClipStripRow(clip: clip, selected: model.selectedClipID == clip.id)
                             }
+                            .buttonStyle(ClipCardButtonStyle(selected: model.selectedClipID == clip.id))
                         }
                     }
                 }
@@ -664,23 +1015,71 @@ public struct RootView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
-    private var inspectorPaneView: some View {
-        CardSurface {
-            VStack(alignment: .leading, spacing: 16) {
-                Picker("Inspector", selection: $inspectorPane) {
-                    Text("Details").tag(0)
-                    Text("Rules Studio").tag(1)
-                }
-                .pickerStyle(.segmented)
+    private func scopeDescription(_ scope: ClipScope) -> String {
+        switch scope {
+        case .all:
+            return "展示当前时间范围内的全部有效剪藏"
+        case .inbox:
+            return "只看尚未整理的新增剪藏"
+        case .library:
+            return "只看已归档和处理过的内容"
+        case .trash:
+            return "查看已移入废纸篓的剪藏"
+        }
+    }
 
-                if inspectorPane == 0 {
-                    ClipInspectorView(clip: model.selectedClip)
-                } else {
-                    CategoryRulesStudio()
+    private func platformSubtitle(_ filter: PlatformFilter) -> String {
+        switch filter {
+        case .all:
+            return "显示所有平台的剪藏"
+        case let .bucket(bucket):
+            return "聚焦 \(bucket.title) 的内容"
+        }
+    }
+
+    private func platformCount(_ filter: PlatformFilter) -> String {
+        switch filter {
+        case .all:
+            return "\(model.clips.count)"
+        case let .bucket(bucket):
+            return "\(model.stats.bucketCounts[bucket, default: 0])"
+        }
+    }
+
+    private var suggestedTags: [String] {
+        Array(Set(model.spaces.flatMap(\.tags))).sorted()
+    }
+
+    @ViewBuilder
+    private func overlayBackdrop(_ overlay: AppOverlay) -> some View {
+        ZStack {
+            Color.black.opacity(0.28)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    model.closeOverlay()
+                }
+
+            switch overlay {
+            case .settings:
+                overlayCard(width: 960) {
+                    SettingsOverlayCard()
+                        .environmentObject(model)
+                }
+            case .clipDetail:
+                overlayCard(width: 720) {
+                    ClipDetailOverlayCard()
+                        .environmentObject(model)
                 }
             }
         }
-        .frame(minWidth: 390, idealWidth: 410, maxWidth: 420, alignment: .top)
+    }
+
+    private func overlayCard<Content: View>(width: CGFloat, @ViewBuilder content: () -> Content) -> some View {
+        CardSurface {
+            content()
+        }
+        .frame(width: width, alignment: .topLeading)
+        .shadow(color: CosmoPalette.shadow, radius: 28, x: 0, y: 18)
     }
 }
 
@@ -688,7 +1087,7 @@ struct TimeboxComposer: View {
     @Binding var draft: TimeboxDraft
 
     var body: some View {
-        HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             Picker("Timebox", selection: $draft.mode) {
                 Text("All").tag(TimeboxMode.all)
                 Text("Past N Hours").tag(TimeboxMode.trailingHours)
@@ -704,13 +1103,15 @@ struct TimeboxComposer: View {
             case .trailingHours:
                 Stepper("\(draft.trailingHours)h", value: $draft.trailingHours, in: 1...720)
             case .day:
-                DatePicker("", selection: $draft.day, displayedComponents: [.date])
-                    .labelsHidden()
+                DatePicker("Day", selection: $draft.day, displayedComponents: [.date])
             case .range:
-                DatePicker("Start", selection: $draft.rangeStart)
-                DatePicker("End", selection: $draft.rangeEnd)
+                VStack(alignment: .leading, spacing: 8) {
+                    DatePicker("Start", selection: $draft.rangeStart)
+                    DatePicker("End", selection: $draft.rangeEnd)
+                }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
         .background(
@@ -737,121 +1138,134 @@ struct ClipInspectorView: View {
     var body: some View {
         Group {
             if let clip {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(clip.platformBucket.title)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(CosmoPalette.textSecondary)
-                            Text(clip.title)
-                                .font(.system(size: 28, weight: .semibold, design: .serif))
-                                .foregroundStyle(CosmoPalette.ink)
-                            Text(clip.url)
-                                .font(.footnote)
-                                .foregroundStyle(CosmoPalette.textSecondary)
-                                .textSelection(.enabled)
-                        }
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(clip.platformBucket.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(CosmoPalette.textSecondary)
+                        Text(clip.title)
+                            .font(.system(size: 28, weight: .semibold, design: .serif))
+                            .foregroundStyle(CosmoPalette.ink)
+                        Text(clip.url)
+                            .font(.footnote)
+                            .foregroundStyle(CosmoPalette.textSecondary)
+                            .textSelection(.enabled)
+                    }
 
-                        HStack(spacing: 10) {
-                            InfoBadge(title: "Captured", value: clip.capturedAt.formatted(date: .abbreviated, time: .shortened))
-                            InfoBadge(title: "Source", value: clip.sourceType.rawValue)
+                    HStack(spacing: 10) {
+                        InfoBadge(title: "Captured", value: clip.capturedAt.formatted(date: .abbreviated, time: .shortened))
+                        InfoBadge(title: "Source", value: clip.sourceType.rawValue)
+                        if !clip.spaceName.isEmpty {
+                            InfoBadge(title: "Space", value: clip.spaceName)
                         }
+                    }
 
-                        VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
                             Text("Summary")
                                 .font(.headline)
-                            TextEditor(text: .constant(clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary))
-                                .frame(minHeight: 130)
-                                .padding(8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .fill(CosmoPalette.surfaceSoft)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                                .strokeBorder(CosmoPalette.line, lineWidth: 1)
-                                        )
-                                )
-                                .disabled(true)
-                        }
-
-                        HStack(spacing: 10) {
-                            Button {
-                                model.openSelectedClipURL()
-                            } label: {
-                                Label("Open URL", systemImage: "arrow.up.right.square")
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 11)
-                                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            Spacer()
+                            if model.summaryGenerationRunning.contains(clip.id) {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Button("Refresh AI Summary") {
+                                    model.refreshAISummary(for: clip.id)
+                                }
+                                .buttonStyle(.borderless)
                             }
-                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
-                            .disabled(clip.url.hasPrefix("clipboard://"))
-
-                            Button {
-                                model.copySelectedClipURL()
-                            } label: {
-                                Label("Copy URL", systemImage: "link")
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 11)
-                                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            }
-                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
                         }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Category")
-                                .font(.headline)
-                            TextField("Category", text: $category)
-                                .textFieldStyle(.roundedBorder)
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Tags")
-                                .font(.headline)
-                            TextField("tag1, tag2", text: $tags)
-                                .textFieldStyle(.roundedBorder)
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Note")
-                                .font(.headline)
-                            TextEditor(text: $note)
-                                .frame(minHeight: 150)
-                                .padding(8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .fill(CosmoPalette.surfaceSoft)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                                .strokeBorder(CosmoPalette.line, lineWidth: 1)
-                                        )
-                                )
-                        }
-
-                        Picker("Status", selection: $status) {
-                            Text("Inbox").tag(ClipStatus.inbox)
-                            Text("Library").tag(ClipStatus.library)
-                            Text("Failed").tag(ClipStatus.failed)
-                            Text("Trash").tag(ClipStatus.trashed)
-                        }
-                        .pickerStyle(.segmented)
-
-                        Button {
-                            model.saveClipEdits(
-                                id: clip.id,
-                                category: category,
-                                tagsText: tags,
-                                note: note,
-                                status: status
+                        TextEditor(text: .constant(clip.aiSummary.isEmpty ? "正在准备中文摘要…" : clip.aiSummary))
+                            .frame(minHeight: 130)
+                            .padding(8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(CosmoPalette.surfaceSoft)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .strokeBorder(CosmoPalette.line, lineWidth: 1)
+                                    )
                             )
+                            .disabled(true)
+                    }
+
+                    HStack(spacing: 10) {
+                        Button {
+                            model.openSelectedClipURL()
                         } label: {
-                            Label("Save Clip", systemImage: "square.and.arrow.down")
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .frame(maxWidth: .infinity)
+                            Label("Open URL", systemImage: "arrow.up.right.square")
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 11)
                                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                        .disabled(clip.url.hasPrefix("clipboard://"))
+
+                        Button {
+                            model.copySelectedClipURL()
+                        } label: {
+                            Label("Copy URL", systemImage: "link")
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 11)
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
                     }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Category")
+                            .font(.headline)
+                        TextField("Category", text: $category)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Tags")
+                            .font(.headline)
+                        TextField("tag1, tag2", text: $tags)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Note")
+                            .font(.headline)
+                        TextEditor(text: $note)
+                            .frame(minHeight: 150)
+                            .padding(8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(CosmoPalette.surfaceSoft)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .strokeBorder(CosmoPalette.line, lineWidth: 1)
+                                    )
+                            )
+                    }
+
+                    Picker("Status", selection: $status) {
+                        Text("Inbox").tag(ClipStatus.inbox)
+                        Text("Library").tag(ClipStatus.library)
+                        Text("Failed").tag(ClipStatus.failed)
+                        Text("Trash").tag(ClipStatus.trashed)
+                    }
+                    .pickerStyle(.segmented)
+
+                    Button {
+                        model.saveClipEdits(
+                            id: clip.id,
+                            category: category,
+                            tagsText: tags,
+                            note: note,
+                            status: status
+                        )
+                    } label: {
+                        Label("Save Clip", systemImage: "square.and.arrow.down")
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity)
+                            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
                 }
                 .onAppear {
                     populate(from: clip)
@@ -870,6 +1284,35 @@ struct ClipInspectorView: View {
         tags = clip.tags.joined(separator: ", ")
         note = clip.note
         status = clip.status
+    }
+}
+
+private struct ClipDetailOverlayCard: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Clip Detail")
+                        .font(.system(size: 30, weight: .semibold, design: .serif))
+                        .foregroundStyle(CosmoPalette.ink)
+                    Text("点击条目后这里会弹出详情卡片，摘要会自动尝试用 AI 生成中文版本。")
+                        .foregroundStyle(CosmoPalette.textSecondary)
+                }
+                Spacer()
+                Button {
+                    model.closeOverlay()
+                } label: {
+                    Image(systemName: "xmark")
+                        .padding(10)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+            }
+
+            ClipInspectorView(clip: model.selectedClip)
+        }
     }
 }
 
@@ -907,7 +1350,7 @@ struct CategoryRulesStudio: View {
                 .buttonStyle(.borderedProminent)
             }
 
-            List {
+            VStack(spacing: 10) {
                 ForEach(model.categoryRules) { rule in
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
@@ -922,32 +1365,113 @@ struct CategoryRulesStudio: View {
                             model.deleteCategoryRule(rule)
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(CosmoPalette.surfaceSoft)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .strokeBorder(CosmoPalette.line, lineWidth: 1)
+                            )
+                    )
                 }
             }
-            .listStyle(.plain)
         }
     }
 }
 
 public struct SettingsRootView: View {
+    @EnvironmentObject private var model: AppModel
+
     public init() {}
 
     public var body: some View {
-        TabView {
-            AppearanceSettingsView()
-                .tabItem { Label("Appearance", systemImage: "circle.lefthalf.filled") }
-            ProvidersSettingsView()
-                .tabItem { Label("Providers", systemImage: "brain.head.profile") }
-            ShortcutSettingsView()
-                .tabItem { Label("Shortcuts", systemImage: "command") }
-            CaptureSettingsView()
-                .tabItem { Label("Capture", systemImage: "square.and.arrow.down") }
-            StorageSettingsView()
-                .tabItem { Label("Storage", systemImage: "internaldrive") }
+        settingsLayout
+    }
+
+    @ViewBuilder
+    fileprivate var settingsLayout: some View {
+        HStack(alignment: .top, spacing: 18) {
+            CardSurface {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Settings")
+                        .font(.system(size: 28, weight: .semibold, design: .serif))
+                        .foregroundStyle(CosmoPalette.ink)
+                    Text("这里使用自定义侧边导航，保证外部按钮点击后一定能切到对应页面。")
+                        .font(.subheadline)
+                        .foregroundStyle(CosmoPalette.textSecondary)
+
+                    ForEach(SettingsTab.allCases) { tab in
+                        Button {
+                            model.selectedSettingsTab = tab
+                        } label: {
+                            Label(tab.title, systemImage: tab.systemImage)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(SettingsSidebarButtonStyle(selected: model.selectedSettingsTab == tab))
+                    }
+                }
+            }
+            .frame(width: 250, alignment: .topLeading)
+
+            CardSurface {
+                settingsContent
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .frame(minWidth: 980, minHeight: 700)
+        .frame(minWidth: 860, minHeight: 700)
         .padding(18)
+    }
+
+    @ViewBuilder
+    private var settingsContent: some View {
+        switch model.selectedSettingsTab {
+        case .appearance:
+            AppearanceSettingsView()
+        case .providers:
+            ProvidersSettingsView()
+        case .shortcuts:
+            ShortcutSettingsView()
+        case .capture:
+            CaptureSettingsView()
+        case .storage:
+            StorageSettingsView()
+        }
+    }
+}
+
+private struct SettingsOverlayCard: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Settings")
+                        .font(.system(size: 30, weight: .semibold, design: .serif))
+                        .foregroundStyle(CosmoPalette.ink)
+                    Text("这些入口现在直接在主窗口内切换，不再依赖系统设置窗口。")
+                        .foregroundStyle(CosmoPalette.textSecondary)
+                }
+                Spacer()
+                Button {
+                    model.closeOverlay()
+                } label: {
+                    Image(systemName: "xmark")
+                        .padding(10)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+            }
+
+            SettingsRootView()
+                .environmentObject(model)
+                .padding(0)
+        }
     }
 }
 
@@ -1098,7 +1622,8 @@ struct ProviderEditorCard: View {
                     .buttonStyle(.bordered)
 
                     Button(model.providerProbeRunning.contains(profile.id) ? "Testing…" : "Test Connection") {
-                        model.testProviderConnection(profile)
+                        save()
+                        model.testProviderConnection(profile, apiKeyOverride: apiKey)
                     }
                     .buttonStyle(.bordered)
                     .disabled(model.providerProbeRunning.contains(profile.id))
@@ -1305,5 +1830,14 @@ private extension PlatformFilter {
             return bucket
         }
         return nil
+    }
+
+    var label: String {
+        switch self {
+        case .all:
+            "全部平台"
+        case let .bucket(bucket):
+            bucket.title
+        }
     }
 }

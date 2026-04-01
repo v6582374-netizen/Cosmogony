@@ -39,6 +39,11 @@ struct ProviderProbeResult: Sendable {
     var resolvedURL: String
 }
 
+struct SummaryGenerationResult: Sendable {
+    var summary: String
+    var resolvedURL: String
+}
+
 enum CaptureError: LocalizedError {
     case unsupportedBrowser
     case noFrontmostPage
@@ -226,6 +231,129 @@ struct ProviderProbeService: Sendable {
         }
 
         return request
+    }
+}
+
+struct AISummaryService: Sendable {
+    func summarizeChinese(clip: ClipItem, profile: ProviderProfile, apiKey: String) async throws -> SummaryGenerationResult {
+        let secret = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !secret.isEmpty else {
+            throw NSError(domain: "Cosmogony.AISummary", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing API key."])
+        }
+
+        let prompt = buildPrompt(for: clip)
+        guard let request = buildRequest(profile: profile, apiKey: secret, prompt: prompt) else {
+            throw NSError(domain: "Cosmogony.AISummary", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid provider URL."])
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(domain: "Cosmogony.AISummary", code: 3, userInfo: [NSLocalizedDescriptionKey: "No HTTP response."])
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let body = String(decoding: data.prefix(300), as: UTF8.self)
+            throw NSError(domain: "Cosmogony.AISummary", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: body.isEmpty ? "Summary request failed." : body])
+        }
+
+        let summary = try parseSummary(from: data, kind: profile.kind)
+        return SummaryGenerationResult(summary: summary, resolvedURL: request.url?.absoluteString ?? profile.resolvedBaseURL)
+    }
+
+    private func buildPrompt(for clip: ClipItem) -> String {
+        let body = [clip.title, clip.excerpt, clip.content, clip.url, clip.category, clip.tags.joined(separator: ", "), clip.note]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
+
+        return """
+        你是一名中文信息整理助手。请基于以下网页或剪藏内容，输出一段简洁、准确、自然的中文摘要。
+        要求：
+        1. 使用简体中文。
+        2. 直接输出摘要正文，不要加标题、前缀或编号。
+        3. 控制在 80 到 140 字之间。
+        4. 如果内容像是产品、文章、帖子或视频，请概括核心主题、用途或观点。
+
+        内容：
+        \(body)
+        """
+    }
+
+    private func buildRequest(profile: ProviderProfile, apiKey: String, prompt: String) -> URLRequest? {
+        let trimmedBaseURL = profile.resolvedBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+        switch profile.kind {
+        case .openAI, .deepseek, .minimax, .openAICompatible:
+            guard let url = URL(string: "\(trimmedBaseURL)/v1/chat/completions") else { return nil }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 25
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            let body: [String: Any] = [
+                "model": profile.defaultModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "deepseek-chat" : profile.defaultModel,
+                "messages": [
+                    ["role": "system", "content": "你负责把收藏内容理解后整理成简洁的中文摘要。"],
+                    ["role": "user", "content": prompt]
+                ],
+                "temperature": 0.2
+            ]
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            return request
+        case .claude:
+            guard let url = URL(string: "\(trimmedBaseURL)/v1/messages") else { return nil }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 25
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+            let body: [String: Any] = [
+                "model": profile.defaultModel,
+                "max_tokens": 220,
+                "messages": [
+                    ["role": "user", "content": prompt]
+                ]
+            ]
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            return request
+        case .gemini:
+            let model = profile.defaultModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "gemini-1.5-flash" : profile.defaultModel
+            let encodedKey = apiKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? apiKey
+            guard let url = URL(string: "\(trimmedBaseURL)/v1beta/models/\(model):generateContent?key=\(encodedKey)") else { return nil }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 25
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let body: [String: Any] = [
+                "contents": [
+                    ["parts": [["text": prompt]]]
+                ]
+            ]
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            return request
+        }
+    }
+
+    private func parseSummary(from data: Data, kind: ProviderKind) throws -> String {
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+        switch kind {
+        case .openAI, .deepseek, .minimax, .openAICompatible:
+            let choices = json["choices"] as? [[String: Any]]
+            let message = choices?.first?["message"] as? [String: Any]
+            let content = (message?["content"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !content.isEmpty else { throw NSError(domain: "Cosmogony.AISummary", code: 4, userInfo: [NSLocalizedDescriptionKey: "Summary response was empty."]) }
+            return content
+        case .claude:
+            let content = json["content"] as? [[String: Any]]
+            let text = (content?.first?["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { throw NSError(domain: "Cosmogony.AISummary", code: 4, userInfo: [NSLocalizedDescriptionKey: "Summary response was empty."]) }
+            return text
+        case .gemini:
+            let candidates = json["candidates"] as? [[String: Any]]
+            let candidate = candidates?.first?["content"] as? [String: Any]
+            let parts = candidate?["parts"] as? [[String: Any]]
+            let text = (parts?.first?["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { throw NSError(domain: "Cosmogony.AISummary", code: 4, userInfo: [NSLocalizedDescriptionKey: "Summary response was empty."]) }
+            return text
+        }
     }
 }
 
