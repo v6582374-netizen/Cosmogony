@@ -1,0 +1,67 @@
+name: Cosmogony
+options:
+  createIntermediateGroups: true
+  minimumXcodeGenVersion: 2.38.0
+settings:
+  base:
+    PRODUCT_NAME: Cosmogony
+    PRODUCT_BUNDLE_IDENTIFIER: net.v6582374.cosmogony
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_VERSION: "6.0"
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_CFBundleDisplayName: Cosmogony
+    INFOPLIST_KEY_CFBundleName: Cosmogony
+    INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+    INFOPLIST_KEY_NSAppleEventsUsageDescription: Cosmogony needs Apple Events access to read the active tab from supported Chromium browsers.
+    INFOPLIST_KEY_NSPasteboardUsageDescription: Cosmogony reads clipboard text when you trigger the capture-clipboard shortcut.
+    INFOPLIST_KEY_NSHumanReadableCopyright: Copyright © 2026 Cosmogony
+    INFOPLIST_KEY_CFBundleIconFile: Cosmogony
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+packages:
+  GRDB.swift:
+    url: https://github.com/groue/GRDB.swift.git
+    from: 7.10.0
+targets:
+  Cosmogony:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Sources/CosmogonyApp
+      - path: Sources/CosmogonyCore
+      - path: Xcode/Assets.xcassets
+    dependencies:
+      - package: GRDB.swift
+        product: GRDB
+    settings:
+      base:
+        PRODUCT_NAME: Cosmogony
+        EXECUTABLE_NAME: Cosmogony
+        ENABLE_HARDENED_RUNTIME: NO
+        SWIFT_EMIT_LOC_STRINGS: NO
+  CosmogonyChecks:
+    type: tool
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Sources/CosmogonyChecks
+      - path: Sources/CosmogonyCore
+    dependencies:
+      - package: GRDB.swift
+        product: GRDB
+schemes:
+  Cosmogony:
+    build:
+      targets:
+        Cosmogony: all
+    run:
+      config: Debug
+  CosmogonyChecks:
+    build:
+      targets:
+        CosmogonyChecks: all
+    run:
+      config: Debug
+

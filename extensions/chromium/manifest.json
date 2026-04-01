@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Cosmogony Bridge",
+  "version": "0.1.0",
+  "description": "Thin Chromium companion for the Cosmogony macOS app.",
+  "permissions": ["storage", "activeTab", "scripting", "contextMenus"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Send page to Cosmogony"
+  },
+  "commands": {
+    "capture-current-page": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "Capture the current page into Cosmogony"
+    }
+  }
+}

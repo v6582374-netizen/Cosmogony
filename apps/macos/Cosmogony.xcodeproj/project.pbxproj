@@ -1,0 +1,511 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		05C01943BD7ADE0097A36F14 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A229D663132120FF2A0F06A6 /* main.swift */; };
+		2AED25CA74891DD36183E5FC /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 598A8E40F226B6E1926039E2 /* GRDB */; };
+		4F736A8E81CD919D7BEBC6B7 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A7FA967CC1771BA4F3D7D4C0 /* GRDB */; };
+		4FB13C307C536B5EC886A864 /* CaptureServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = C64E543F14380B68ED42E335 /* CaptureServices.swift */; };
+		54B825E4202302492A40B41B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 195F22579D1966A5C2B9E896 /* Assets.xcassets */; };
+		5C3153AD47AAD51FEEC781B0 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B6214C0187BD1FF3E4D0767 /* AppModel.swift */; };
+		606310B20BDF82B037C442AC /* Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DAB6A5556703B9B13E3EED9 /* Support.swift */; };
+		881C364C4F822D2B714760E0 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50F9734520796D578571F0DD /* Persistence.swift */; };
+		8AA60FE645F73748BC894693 /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D45BD15D845CB12DE2AE5E6 /* Views.swift */; };
+		AB8FCAC865A34AA7DECBAD51 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50F9734520796D578571F0DD /* Persistence.swift */; };
+		B53CCA703BA4EA372680E88B /* Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DAB6A5556703B9B13E3EED9 /* Support.swift */; };
+		C6A441385EB1732EEA58CC49 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B6214C0187BD1FF3E4D0767 /* AppModel.swift */; };
+		CC91EB5BC4885319548093DB /* CosmogonyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840F4C52FDA711E13054821A /* CosmogonyApp.swift */; };
+		D7DAB198B1D73B95F66B0A26 /* CaptureServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = C64E543F14380B68ED42E335 /* CaptureServices.swift */; };
+		F693670B245142B0A03CC836 /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D45BD15D845CB12DE2AE5E6 /* Views.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		195F22579D1966A5C2B9E896 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		29229BC2197AE4CB2ABD96A4 /* CosmogonyChecks */ = {isa = PBXFileReference; includeInIndex = 0; path = CosmogonyChecks; sourceTree = BUILT_PRODUCTS_DIR; };
+		2D45BD15D845CB12DE2AE5E6 /* Views.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views.swift; sourceTree = "<group>"; };
+		3B6214C0187BD1FF3E4D0767 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		3DAB6A5556703B9B13E3EED9 /* Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Support.swift; sourceTree = "<group>"; };
+		50F9734520796D578571F0DD /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
+		581B5DA7712277E6BF0EA4E1 /* Cosmogony.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cosmogony.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		840F4C52FDA711E13054821A /* CosmogonyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CosmogonyApp.swift; sourceTree = "<group>"; };
+		A229D663132120FF2A0F06A6 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		C64E543F14380B68ED42E335 /* CaptureServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureServices.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		08538D78FAAE85B45B3112BF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4F736A8E81CD919D7BEBC6B7 /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		92C2086CBF5B8DA475C195C8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2AED25CA74891DD36183E5FC /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0C57962670BAB10DB57F6043 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				581B5DA7712277E6BF0EA4E1 /* Cosmogony.app */,
+				29229BC2197AE4CB2ABD96A4 /* CosmogonyChecks */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		13D6E9B590B531E64C8AEB6B /* CosmogonyApp */ = {
+			isa = PBXGroup;
+			children = (
+				840F4C52FDA711E13054821A /* CosmogonyApp.swift */,
+			);
+			path = CosmogonyApp;
+			sourceTree = "<group>";
+		};
+		5ABC3AB771498B07345AB1CF = {
+			isa = PBXGroup;
+			children = (
+				79C62DA43E9E3B8A70C240C4 /* Sources */,
+				5BA07B6D2E9183DCBF623F68 /* Xcode */,
+				0C57962670BAB10DB57F6043 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5BA07B6D2E9183DCBF623F68 /* Xcode */ = {
+			isa = PBXGroup;
+			children = (
+				195F22579D1966A5C2B9E896 /* Assets.xcassets */,
+			);
+			path = Xcode;
+			sourceTree = "<group>";
+		};
+		79C62DA43E9E3B8A70C240C4 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				13D6E9B590B531E64C8AEB6B /* CosmogonyApp */,
+				CE91A3A625C00367E3911EB1 /* CosmogonyChecks */,
+				84AE1AB9FAFB863A9215BCF1 /* CosmogonyCore */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		84AE1AB9FAFB863A9215BCF1 /* CosmogonyCore */ = {
+			isa = PBXGroup;
+			children = (
+				3B6214C0187BD1FF3E4D0767 /* AppModel.swift */,
+				C64E543F14380B68ED42E335 /* CaptureServices.swift */,
+				50F9734520796D578571F0DD /* Persistence.swift */,
+				3DAB6A5556703B9B13E3EED9 /* Support.swift */,
+				2D45BD15D845CB12DE2AE5E6 /* Views.swift */,
+			);
+			path = CosmogonyCore;
+			sourceTree = "<group>";
+		};
+		CE91A3A625C00367E3911EB1 /* CosmogonyChecks */ = {
+			isa = PBXGroup;
+			children = (
+				A229D663132120FF2A0F06A6 /* main.swift */,
+			);
+			path = CosmogonyChecks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		CA0CEA265679D0A2EB16B500 /* CosmogonyChecks */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FE91C3DA830C7920617E665D /* Build configuration list for PBXNativeTarget "CosmogonyChecks" */;
+			buildPhases = (
+				AD60A0053A09AA6153E5C182 /* Sources */,
+				92C2086CBF5B8DA475C195C8 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CosmogonyChecks;
+			packageProductDependencies = (
+				598A8E40F226B6E1926039E2 /* GRDB */,
+			);
+			productName = CosmogonyChecks;
+			productReference = 29229BC2197AE4CB2ABD96A4 /* CosmogonyChecks */;
+			productType = "com.apple.product-type.tool";
+		};
+		E2A5F7609914A7E1D1072598 /* Cosmogony */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 108D3767FD3BF88FC9C99106 /* Build configuration list for PBXNativeTarget "Cosmogony" */;
+			buildPhases = (
+				7353A9513383B9CCAD70132B /* Sources */,
+				B2D9DB71089044E2B1D1E220 /* Resources */,
+				08538D78FAAE85B45B3112BF /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Cosmogony;
+			packageProductDependencies = (
+				A7FA967CC1771BA4F3D7D4C0 /* GRDB */,
+			);
+			productName = Cosmogony;
+			productReference = 581B5DA7712277E6BF0EA4E1 /* Cosmogony.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		22DC72BD26A112DD09DE9D53 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					CA0CEA265679D0A2EB16B500 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					E2A5F7609914A7E1D1072598 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = D89CF8E527441711086CFA70 /* Build configuration list for PBXProject "Cosmogony" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 5ABC3AB771498B07345AB1CF;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				80CB4260B386ACD715247222 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E2A5F7609914A7E1D1072598 /* Cosmogony */,
+				CA0CEA265679D0A2EB16B500 /* CosmogonyChecks */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B2D9DB71089044E2B1D1E220 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				54B825E4202302492A40B41B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7353A9513383B9CCAD70132B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5C3153AD47AAD51FEEC781B0 /* AppModel.swift in Sources */,
+				D7DAB198B1D73B95F66B0A26 /* CaptureServices.swift in Sources */,
+				CC91EB5BC4885319548093DB /* CosmogonyApp.swift in Sources */,
+				881C364C4F822D2B714760E0 /* Persistence.swift in Sources */,
+				B53CCA703BA4EA372680E88B /* Support.swift in Sources */,
+				F693670B245142B0A03CC836 /* Views.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AD60A0053A09AA6153E5C182 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C6A441385EB1732EEA58CC49 /* AppModel.swift in Sources */,
+				4FB13C307C536B5EC886A864 /* CaptureServices.swift in Sources */,
+				AB8FCAC865A34AA7DECBAD51 /* Persistence.swift in Sources */,
+				606310B20BDF82B037C442AC /* Support.swift in Sources */,
+				8AA60FE645F73748BC894693 /* Views.swift in Sources */,
+				05C01943BD7ADE0097A36F14 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		13D9EA2C4C861AF374258B7D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				EXECUTABLE_NAME = Cosmogony;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_NAME = Cosmogony;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+			};
+			name = Release;
+		};
+		3529FAF9D2237A98814B618D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Cosmogony;
+				INFOPLIST_KEY_CFBundleIconFile = Cosmogony;
+				INFOPLIST_KEY_CFBundleName = Cosmogony;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Cosmogony needs Apple Events access to read the active tab from supported Chromium browsers.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Cosmogony";
+				INFOPLIST_KEY_NSPasteboardUsageDescription = "Cosmogony reads clipboard text when you trigger the capture-clipboard shortcut.";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = net.v6582374.cosmogony;
+				PRODUCT_NAME = Cosmogony;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		3B376EBEA2173CD734872436 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		8013D499E02443D9A4E6AF08 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Cosmogony;
+				INFOPLIST_KEY_CFBundleIconFile = Cosmogony;
+				INFOPLIST_KEY_CFBundleName = Cosmogony;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Cosmogony needs Apple Events access to read the active tab from supported Chromium browsers.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Cosmogony";
+				INFOPLIST_KEY_NSPasteboardUsageDescription = "Cosmogony reads clipboard text when you trigger the capture-clipboard shortcut.";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = net.v6582374.cosmogony;
+				PRODUCT_NAME = Cosmogony;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		CD62FB492DCFAF755D96A9E7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				EXECUTABLE_NAME = Cosmogony;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_NAME = Cosmogony;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+			};
+			name = Debug;
+		};
+		F2868D9A226411A9CECAB47D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		108D3767FD3BF88FC9C99106 /* Build configuration list for PBXNativeTarget "Cosmogony" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CD62FB492DCFAF755D96A9E7 /* Debug */,
+				13D9EA2C4C861AF374258B7D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D89CF8E527441711086CFA70 /* Build configuration list for PBXProject "Cosmogony" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8013D499E02443D9A4E6AF08 /* Debug */,
+				3529FAF9D2237A98814B618D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FE91C3DA830C7920617E665D /* Build configuration list for PBXNativeTarget "CosmogonyChecks" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F2868D9A226411A9CECAB47D /* Debug */,
+				3B376EBEA2173CD734872436 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		80CB4260B386ACD715247222 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		598A8E40F226B6E1926039E2 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 80CB4260B386ACD715247222 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+		A7FA967CC1771BA4F3D7D4C0 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 80CB4260B386ACD715247222 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 22DC72BD26A112DD09DE9D53 /* Project object */;
+}

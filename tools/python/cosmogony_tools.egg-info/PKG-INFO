@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: cosmogony-tools
+Version: 0.1.0
+Summary: Python helpers for Cosmogony migration and diagnostics
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+
+# Cosmogony Python helpers
+
+Use `uv` to create and manage the shared virtual environment:
+
+```bash
+cd tools/python
+uv venv ../../.venv
+source ../../.venv/bin/activate
+uv pip install -e .
+```
+
