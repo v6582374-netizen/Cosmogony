@@ -20,18 +20,43 @@ package enum CosmoTextClassifier {
 }
 
 enum CosmoTypography {
+    enum Role {
+        case display
+        case body
+        case ui
+        case mono
+    }
+
     static let songtiFamily = "Songti SC"
+    static let uiFamily = "PingFang SC"
 
     static func font(
         for text: String,
+        role: Role = .body,
         size: CGFloat,
         weight: Font.Weight = .regular,
         design: Font.Design = .default
     ) -> Font {
-        if CosmoTextClassifier.containsChinese(text) {
-            return Font.custom(songtiFamily, size: size).weight(weight)
+        switch role {
+        case .display:
+            if CosmoTextClassifier.containsChinese(text) {
+                return Font.custom(songtiFamily, size: size).weight(weight)
+            }
+            return .system(size: size, weight: weight, design: .serif)
+        case .body:
+            if CosmoTextClassifier.containsChinese(text) {
+                return Font.custom(uiFamily, size: size).weight(weight)
+            }
+            return .system(size: size, weight: weight, design: design)
+        case .ui:
+            if CosmoTextClassifier.containsChinese(text) {
+                return Font.custom(uiFamily, size: size).weight(weight)
+            }
+            let resolvedDesign: Font.Design = design == .default ? .rounded : design
+            return .system(size: size, weight: weight, design: resolvedDesign)
+        case .mono:
+            return .system(size: size, weight: weight, design: .monospaced)
         }
-        return .system(size: size, weight: weight, design: design)
     }
 
     static func songti(size: CGFloat, weight: Font.Weight = .regular) -> Font {
@@ -46,13 +71,34 @@ extension Text {
         weight: Font.Weight = .regular,
         design: Font.Design = .default
     ) -> Text {
-        font(CosmoTypography.font(for: sample, size: size, weight: weight, design: design))
+        font(CosmoTypography.font(for: sample, role: .body, size: size, weight: weight, design: design))
+    }
+
+    func cosmoDisplayFont(
+        _ sample: String,
+        size: CGFloat,
+        weight: Font.Weight = .regular
+    ) -> Text {
+        font(CosmoTypography.font(for: sample, role: .display, size: size, weight: weight))
+    }
+
+    func cosmoUIFont(
+        _ sample: String,
+        size: CGFloat,
+        weight: Font.Weight = .regular,
+        design: Font.Design = .default
+    ) -> Text {
+        font(CosmoTypography.font(for: sample, role: .ui, size: size, weight: weight, design: design))
     }
 }
 
 extension View {
     func cosmoInputFont(size: CGFloat = 15) -> some View {
-        font(CosmoTypography.songti(size: size))
+        font(CosmoTypography.font(for: "Input", role: .ui, size: size))
+    }
+
+    func cosmoMonoFont(size: CGFloat = 13, weight: Font.Weight = .regular) -> some View {
+        font(CosmoTypography.font(for: "Mono", role: .mono, size: size, weight: weight))
     }
 }
 

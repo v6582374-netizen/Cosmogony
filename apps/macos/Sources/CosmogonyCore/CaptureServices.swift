@@ -44,6 +44,18 @@ struct SummaryGenerationResult: Sendable {
     var resolvedURL: String
 }
 
+struct ClipEnrichmentGenerationResult: Sendable {
+    var summary: String
+    var category: String
+    var tags: [String]
+    var resolvedURL: String
+}
+
+struct ClipboardReadingGenerationResult: Sendable {
+    var payload: ClipboardReadingPayload
+    var resolvedURL: String
+}
+
 enum CaptureError: LocalizedError {
     case unsupportedBrowser
     case noFrontmostPage
@@ -235,6 +247,29 @@ struct ProviderProbeService: Sendable {
 }
 
 struct AISummaryService: Sendable {
+    func generateClipEnrichment(clip: ClipItem, profile: ProviderProfile, apiKey: String) async throws -> ClipEnrichmentGenerationResult {
+        let secret = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !secret.isEmpty else {
+            throw NSError(domain: "Cosmogony.AISummary", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing API key."])
+        }
+
+        let prompt = buildClipEnrichmentPrompt(for: clip)
+        let generated = try await performTextGeneration(
+            profile: profile,
+            apiKey: secret,
+            systemPrompt: "You analyze captured content for a knowledge library. Return strict JSON only.",
+            userPrompt: prompt,
+            temperature: 0.15
+        )
+        let enrichment = try parseClipEnrichmentPayload(from: generated.text)
+        return ClipEnrichmentGenerationResult(
+            summary: enrichment.summary,
+            category: enrichment.category,
+            tags: enrichment.tags,
+            resolvedURL: generated.resolvedURL
+        )
+    }
+
     func summarizeChinese(clip: ClipItem, profile: ProviderProfile, apiKey: String) async throws -> SummaryGenerationResult {
         let secret = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !secret.isEmpty else {
@@ -242,21 +277,73 @@ struct AISummaryService: Sendable {
         }
 
         let prompt = buildPrompt(for: clip)
-        guard let request = buildRequest(profile: profile, apiKey: secret, prompt: prompt) else {
-            throw NSError(domain: "Cosmogony.AISummary", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid provider URL."])
+        let generated = try await performTextGeneration(
+            profile: profile,
+            apiKey: secret,
+            systemPrompt: "你负责把收藏内容理解后整理成简洁的中文摘要。",
+            userPrompt: prompt,
+            temperature: 0.2
+        )
+        return SummaryGenerationResult(summary: generated.text, resolvedURL: generated.resolvedURL)
+    }
+
+    func generateClipboardReading(clip: ClipItem, profile: ProviderProfile, apiKey: String) async throws -> ClipboardReadingGenerationResult {
+        let secret = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !secret.isEmpty else {
+            throw NSError(domain: "Cosmogony.AISummary", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing API key."])
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw NSError(domain: "Cosmogony.AISummary", code: 3, userInfo: [NSLocalizedDescriptionKey: "No HTTP response."])
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            let body = String(decoding: data.prefix(300), as: UTF8.self)
-            throw NSError(domain: "Cosmogony.AISummary", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: body.isEmpty ? "Summary request failed." : body])
+        let source = limitedClipboardReadingSource(from: clip.content)
+        let prompt = buildClipboardReadingPrompt(for: clip, sourceText: source.text, isPartial: source.isPartial)
+        let generated = try await performTextGeneration(
+            profile: profile,
+            apiKey: secret,
+            systemPrompt: "You turn imported clipboard text into structured bilingual reading cards. Return strict JSON only.",
+            userPrompt: prompt,
+            temperature: 0.2
+        )
+        let payload = try parseClipboardReadingPayload(from: generated.text)
+        return ClipboardReadingGenerationResult(payload: payload, resolvedURL: generated.resolvedURL)
+    }
+
+    private func buildClipEnrichmentPrompt(for clip: ClipItem) -> String {
+        let source = limitedClipEnrichmentSource(for: clip)
+
+        return """
+        Analyze this captured item for Cosmogony.
+
+        Return strict JSON with exactly this schema:
+        {
+          "summary": "string",
+          "category": "string",
+          "tags": ["string"]
         }
 
-        let summary = try parseSummary(from: data, kind: profile.kind)
-        return SummaryGenerationResult(summary: summary, resolvedURL: request.url?.absoluteString ?? profile.resolvedBaseURL)
+        Rules:
+        1. `summary` must be Simplified Chinese, concise, accurate, and 80-160 Chinese characters.
+        2. `category` should be a short human-readable category, also in Simplified Chinese.
+        3. `tags` must contain 8 to 16 high-signal tags whenever the content supports it. Thin content still requires at least 5 tags.
+        4. Tags must be ordered by importance:
+           - first content attributes/carrier tags, such as article, video, clipboard, tutorial, docs, blog, official-site, review, interview, repo, landing-page
+           - then structural/use-case tags, such as guide, reference, benchmark, changelog, comparison, workflow, api, pricing
+           - finally concrete topic tags and named entities
+        5. Prefer lowercase slug-style English tags for web/product concepts when appropriate. Chinese topic tags are also allowed when more natural.
+        6. Deduplicate tags. Avoid empty, vague, or low-information tags.
+        7. Use the actual content first, but also infer useful retrieval tags from URL/domain/title/content type.
+        8. Do not wrap the JSON in markdown fences. Do not add extra commentary.
+
+        Item metadata:
+        title: \(clip.title)
+        url: \(clip.url)
+        domain: \(clip.domain)
+        platform_bucket: \(clip.platformBucket.rawValue)
+        source_type: \(clip.sourceType.rawValue)
+        existing_category: \(clip.category)
+        existing_tags: \(clip.tags.joined(separator: ", "))
+
+        Content:
+        \(source)
+        """
     }
 
     private func buildPrompt(for clip: ClipItem) -> String {
@@ -277,7 +364,88 @@ struct AISummaryService: Sendable {
         """
     }
 
-    private func buildRequest(profile: ProviderProfile, apiKey: String, prompt: String) -> URLRequest? {
+    private func buildClipboardReadingPrompt(for clip: ClipItem, sourceText: String, isPartial: Bool) -> String {
+        """
+        Analyze this clipboard text and create a refined bilingual reading card for Cosmogony.
+
+        Return strict JSON with exactly this schema:
+        {
+          "detected_language": "english",
+          "title_chinese": "string",
+          "summary_chinese": "string",
+          "is_partial": true,
+          "paragraphs": [
+            {
+              "original": "string",
+              "translation": "string"
+            }
+          ]
+        }
+
+        Rules:
+        1. The input text is primarily English plain text from a clipboard capture.
+        2. Keep paragraph order stable and preserve the original wording in each "original" field.
+        3. Translate each paragraph into natural, accurate Simplified Chinese in the matching "translation" field.
+        4. `title_chinese` should be a concise Chinese reading title, not a literal filename.
+        5. `summary_chinese` should be 70-140 Chinese characters and explain the context and value of the text.
+        6. `is_partial` must be \(isPartial ? "true" : "false").
+        7. Do not wrap the JSON in markdown fences. Do not add extra commentary.
+
+        Clip title:
+        \(clip.title)
+
+        Clipboard text:
+        \(sourceText)
+        """
+    }
+
+    private func limitedClipboardReadingSource(from text: String) -> (text: String, isPartial: Bool) {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return ("", false)
+        }
+
+        let paragraphs = plainTextParagraphs(from: normalized)
+        var collected: [String] = []
+        var count = 0
+
+        for paragraph in paragraphs {
+            let nextCount = count + paragraph.count + (collected.isEmpty ? 0 : 2)
+            if collected.count >= 12 || nextCount > 6_000 {
+                break
+            }
+            collected.append(paragraph)
+            count = nextCount
+        }
+
+        if collected.isEmpty {
+            let prefix = String(normalized.prefix(6_000))
+            return (prefix, prefix.count < normalized.count)
+        }
+
+        let clipped = collected.joined(separator: "\n\n")
+        return (clipped, clipped.count < normalized.count || collected.count < paragraphs.count)
+    }
+
+    private func limitedClipEnrichmentSource(for clip: ClipItem) -> String {
+        let raw = [
+            "Excerpt: \(clip.excerpt)",
+            "Content: \(String(clip.content.prefix(10_000)))",
+            clip.note.isEmpty ? "" : "Note: \(clip.note)"
+        ]
+        .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        .joined(separator: "\n\n")
+
+        return raw.isEmpty ? clip.title : raw
+    }
+
+    private func buildRequest(
+        profile: ProviderProfile,
+        apiKey: String,
+        systemPrompt: String,
+        prompt: String,
+        temperature: Double
+    ) -> URLRequest? {
         let trimmedBaseURL = profile.resolvedBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
         switch profile.kind {
         case .openAI, .deepseek, .minimax, .openAICompatible:
@@ -290,10 +458,10 @@ struct AISummaryService: Sendable {
             let body: [String: Any] = [
                 "model": profile.defaultModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "deepseek-chat" : profile.defaultModel,
                 "messages": [
-                    ["role": "system", "content": "你负责把收藏内容理解后整理成简洁的中文摘要。"],
+                    ["role": "system", "content": systemPrompt],
                     ["role": "user", "content": prompt]
                 ],
-                "temperature": 0.2
+                "temperature": temperature
             ]
             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
             return request
@@ -307,7 +475,8 @@ struct AISummaryService: Sendable {
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
             let body: [String: Any] = [
                 "model": profile.defaultModel,
-                "max_tokens": 220,
+                "max_tokens": 1400,
+                "system": systemPrompt,
                 "messages": [
                     ["role": "user", "content": prompt]
                 ]
@@ -324,6 +493,7 @@ struct AISummaryService: Sendable {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             let body: [String: Any] = [
                 "contents": [
+                    ["parts": [["text": systemPrompt]]],
                     ["parts": [["text": prompt]]]
                 ]
             ]
@@ -332,7 +502,37 @@ struct AISummaryService: Sendable {
         }
     }
 
-    private func parseSummary(from data: Data, kind: ProviderKind) throws -> String {
+    private func performTextGeneration(
+        profile: ProviderProfile,
+        apiKey: String,
+        systemPrompt: String,
+        userPrompt: String,
+        temperature: Double
+    ) async throws -> (text: String, resolvedURL: String) {
+        guard let request = buildRequest(
+            profile: profile,
+            apiKey: apiKey,
+            systemPrompt: systemPrompt,
+            prompt: userPrompt,
+            temperature: temperature
+        ) else {
+            throw NSError(domain: "Cosmogony.AISummary", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid provider URL."])
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(domain: "Cosmogony.AISummary", code: 3, userInfo: [NSLocalizedDescriptionKey: "No HTTP response."])
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let body = String(decoding: data.prefix(300), as: UTF8.self)
+            throw NSError(domain: "Cosmogony.AISummary", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: body.isEmpty ? "Summary request failed." : body])
+        }
+
+        let text = try parseTextResponse(from: data, kind: profile.kind)
+        return (text, request.url?.absoluteString ?? profile.resolvedBaseURL)
+    }
+
+    private func parseTextResponse(from data: Data, kind: ProviderKind) throws -> String {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
         switch kind {
         case .openAI, .deepseek, .minimax, .openAICompatible:
@@ -354,6 +554,73 @@ struct AISummaryService: Sendable {
             guard !text.isEmpty else { throw NSError(domain: "Cosmogony.AISummary", code: 4, userInfo: [NSLocalizedDescriptionKey: "Summary response was empty."]) }
             return text
         }
+    }
+
+    private func parseClipboardReadingPayload(from text: String) throws -> ClipboardReadingPayload {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonText = extractJSONObject(from: cleaned)
+        guard let data = jsonText.data(using: .utf8) else {
+            throw NSError(domain: "Cosmogony.AISummary", code: 5, userInfo: [NSLocalizedDescriptionKey: "Reading payload was not valid UTF-8."])
+        }
+
+        struct RawPayload: Decodable {
+            var detected_language: String
+            var title_chinese: String
+            var summary_chinese: String
+            var is_partial: Bool
+            var paragraphs: [RawParagraph]
+        }
+
+        struct RawParagraph: Decodable {
+            var original: String
+            var translation: String
+        }
+
+        let decoded = try JSONDecoder().decode(RawPayload.self, from: data)
+        return ClipboardReadingPayload(
+            detectedLanguage: decoded.detected_language,
+            titleChinese: decoded.title_chinese,
+            summaryChinese: decoded.summary_chinese,
+            isPartial: decoded.is_partial,
+            paragraphs: decoded.paragraphs.map { paragraph in
+                ClipboardReadingParagraph(
+                    original: paragraph.original.trimmingCharacters(in: .whitespacesAndNewlines),
+                    translation: paragraph.translation.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }.filter { !$0.original.isEmpty }
+        )
+    }
+
+    private func parseClipEnrichmentPayload(from text: String) throws -> (summary: String, category: String, tags: [String]) {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonText = extractJSONObject(from: cleaned)
+        guard let data = jsonText.data(using: .utf8) else {
+            throw NSError(domain: "Cosmogony.AISummary", code: 6, userInfo: [NSLocalizedDescriptionKey: "Enrichment payload was not valid UTF-8."])
+        }
+
+        struct RawPayload: Decodable {
+            var summary: String
+            var category: String
+            var tags: [String]
+        }
+
+        let decoded = try JSONDecoder().decode(RawPayload.self, from: data)
+        let tags = decoded.tags
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return (
+            summary: decoded.summary.trimmingCharacters(in: .whitespacesAndNewlines),
+            category: decoded.category.trimmingCharacters(in: .whitespacesAndNewlines),
+            tags: tags
+        )
+    }
+
+    private func extractJSONObject(from text: String) -> String {
+        guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}") else {
+            return text
+        }
+        return String(text[start...end])
     }
 }
 
@@ -559,11 +826,11 @@ final class HotKeyCenter {
         unregisterAll()
     }
 
-    func register(settings: ShortcutSettings, onCapturePage: @escaping Handler, onCaptureClipboard: @escaping Handler) {
+    func register(settings: ShortcutSettings, onOpenRecallOverlay: @escaping Handler, onCaptureClipboard: @escaping Handler) {
         unregisterAll()
-        handlers[1] = onCapturePage
+        handlers[1] = onOpenRecallOverlay
         handlers[2] = onCaptureClipboard
-        hotKeys[1] = register(key: settings.captureCurrentPage, id: 1)
+        hotKeys[1] = register(key: settings.openRecallOverlay, id: 1)
         hotKeys[2] = register(key: settings.captureClipboard, id: 2)
     }
 

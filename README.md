@@ -1,18 +1,14 @@
 # Cosmogony
 
-Cosmogony 是一个 macOS 优先的灵感捕获与链接整理工具，当前由本地桌面应用和轻量 Chromium Companion Extension 组成。
+Cosmogony 是一个 macOS 优先的灵感捕获、召回与整理工作台，当前由本地桌面应用和轻量 Chromium Companion Extension 组成。
 
-这次版本重点完成了三件事：
+当前这一阶段的重点不再只是“把链接存下来”，而是把整个 backstage 做成一套更像控制台的知识整理界面：
 
-- 主界面从“系统表格感”重构为更接近 `mymind` 气质的安静内容画布
-- 修复自绘按钮只点文字才生效的问题，统一扩大整块点击热区
-- 为每个平台分类内置 3 个真实网址作为默认样例，方便开箱验收 UI、分类和搜索
-
-当前阶段又继续补齐了几条真正影响日常使用的交互闭环：
-
-- 顶部搜索 + 下拉筛选替代旧侧边主控区，主窗口更接近 `mymind` 的第一视觉节奏
-- 剪藏详情卡片改为限高可滚动，并支持直接编辑 `summary`
-- 新增重复链接提醒、未保存退出提醒、置顶、左划删除，以及 trash 30 天自动清理
+- `Clips / Prompt Library / Todo / Settings` 已统一进入 backstage 工作台
+- backstage 改成 `模块轨 + 左侧可折叠侧边栏 + 主工作区 + Object Studio` 的固定骨架
+- Prompt Library 的全屏 hive overlay、Recall 入口、Todo 模块和 Settings 模块都已并入同一套设计系统
+- AI enrichment 会为 clip 持久化摘要、分类和排序后的高密度标签，避免对同一内容重复消耗 token
+- Object Studio 从“嵌套卡片表单”改成更接近文档的编辑流，支持摘要、正文、标签、笔记与状态精修
 
 ## 项目结构
 
@@ -29,13 +25,17 @@ Cosmogony 是一个 macOS 优先的灵感捕获与链接整理工具，当前由
 - 本地优先存储
 - 全局快捷键采集当前网页与剪贴板
 - 平台桶分类：`X帖子 / 小红书 / 微信公众号 / 抖音 / YouTube / 其余网页`
-- 时间盒筛选
-- 顶部搜索栏与 `Settings / Platforms / View Scope / Spaces` 下拉菜单
+- backstage 工作台：`Clips / Prompt Library / Todo / Settings`
+- 左侧模块轨、可折叠二级侧栏、主工作区与右侧 `Object Studio`
+- 时间盒筛选与 Recall 入口
 - 网站 favicon 优先显示，失败时自动回退平台图标
-- 详情卡片内联编辑 `summary / category / tags / note / status`
+- 详情页支持内联编辑 `summary / category / tags / note / status / clipboard text`
 - 剪藏去重提示，允许用户取消或继续添加重复链接
 - 置顶排序与垃圾箱 30 天自动清理
 - 本地 Provider Profile 管理，API Key 存入 Keychain
+- Prompt Library 蜂巢视图与内置提示词库
+- Todo 工作流与后台待办清单
+- AI enrichment 缓存与语义搜索支撑
 - 兼容旧版 MuseMark JSON 导入导出
 
 已移除的旧能力包括：
@@ -46,34 +46,36 @@ Cosmogony 是一个 macOS 优先的灵感捕获与链接整理工具，当前由
 
 ## UI 重构说明
 
-新版主窗口不再以系统 `List` 为主，而是改成两层内容结构：
+当前 UI 已从早期的“安静卡片库”继续推进为更明确的 backstage 控制台：
 
-1. 顶部为主搜索栏、快速清空 / 重置按钮，以及 `Settings / Platforms / View Scope / Spaces` 下拉筛选
-2. 主体左侧为辅助工具区，右侧为剪藏内容画布与详情卡片
+1. 左侧是模块轨，负责在 `Clips / Prompt Library / Todo / Settings` 之间切换
+2. 第二列是可折叠侧栏，承载 `Platform / Scope / Space` 等上下文条件
+3. 中间主工作区负责搜索、结果浏览、Prompt 编辑和 Todo 操作
+4. 右侧 `Object Studio` 用文档式排版承担 clip 的精修与保存
 
-界面方向参考了 `mymind` 官方产品表达中强调的“私密、安静、去工具感、卡片化内容组织”思路：
+这轮设计方向参考了 `Linear`、`Arc Spaces`、`Craft` 与更偏控制台的工作台表达，但没有照搬单一产品：
 
-- 柔和暖色背景与轻材质卡片
-- 平台分区优先于密集表格
-- 结果卡片化，降低扫描负担
-- 统一按钮与胶囊样式，减少交互不确定性
+- 弱化软绵绵的大圆角卡片堆叠
+- 用结构分区、细分隔线和更清楚的层级来建立未来感
+- 把 Recall、Prompt、Todo、Clip 编辑统一到同一套 backstage token
+- light / dark mode 使用同一设计系统，而不是混杂两套视觉语言
 
 ## 交互补完说明
 
-这一阶段主要补的是“能看”之外真正影响信息整理效率的部分：
+这一阶段主要补的是 backstage 真正影响日常效率的闭环：
 
 - 重复添加检测：
   对 `http/https` 链接做精确重复检查；若已存在，弹窗提示用户选择取消，或继续添加重复条目。
-- 详情卡片可编辑：
-  `summary` 不再只是只读摘要，而是和 `category / tags / note / status` 一样可直接编辑并保存。
 - 未保存退出保护：
-  详情卡片存在未保存改动时，点击右上角关闭会弹窗提醒，避免误关导致内容丢失。
-- 左划动作：
-  剪藏行支持左划，直接执行“删除”和“置顶 / 取消置顶”；同时保留右键菜单作为补充入口。
+  clip 详情存在未保存改动时，切换条目或关闭详情会弹窗提醒，避免静默丢失修改。
+- Timebox 统一入口：
+  时间范围编辑从冗余侧栏迁移到工作区上下文按钮，支持快速时间范围与完整自定义时间盒。
+- clipboard 文本精修：
+  纯文本剪贴条目可在 Object Studio 中直接编辑正文，并在需要时生成双语阅读结果。
 - Trash 生命周期：
   进入 trash 的条目会记录进入时间，超过 30 天会在后续刷新和启动时自动清理。
 - 保存链路修复：
-  `Save Clip` 现在会一并保存可编辑的 `summary`，并且在条目因筛选条件变化暂时离开当前列表时，详情卡片仍能正确读取数据库中的最新状态。
+  `Save Clip` 会保存摘要、分类、标签、笔记、状态以及剪贴板正文，并在筛选变化后继续保持详情读取正确。
 
 ## 默认分类样例
 
@@ -153,6 +155,14 @@ Cosmogony 是一个 macOS 优先的灵感捕获与链接整理工具，当前由
 - `tags`
 - `note`
 
+在当前实现中，AI enrichment 也会直接刷新这些字段：
+
+- `aiSummary`
+- `category`
+- 经过排序的高密度 `tags`
+- `searchText`
+- semantic search 所需的文本与索引材料
+
 这样做的好处是：
 
 - 搜索逻辑简单稳定
@@ -166,12 +176,13 @@ Cosmogony 是一个 macOS 优先的灵感捕获与链接整理工具，当前由
 
 ### 5. 查询与排序
 
-当前查询逻辑采用“词法优先、语义预留”的分层实现：
+当前查询逻辑采用“词法优先 + 语义召回”的分层实现：
 
 - 标题命中加权最高
 - 域名、分类、标签次之
 - 查询拆词后再做全文 token 命中累计
 - 分数相同时按 `capturedAt` 倒序
+- AI enrichment 生成的高密度 tags 会直接增强 lexical recall
 
 如果系统检测到默认 embedding profile 已配置且可用，会把搜索模式切到 `embedding-ready`，为后续向量召回保留扩展入口；如果没有，则稳定回退到本地 lexical/taxonomy 搜索。
 

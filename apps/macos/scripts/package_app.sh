@@ -12,7 +12,8 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 ICONSET_DIR="$ROOT_DIR/Xcode/Assets.xcassets/AppIcon.appiconset"
 TEMP_ICONSET_DIR="$DIST_DIR/$APP_NAME.iconset"
-SOURCE_ICON="$ROOT_DIR/../../legacy/chrome-extension/public/icon-128.png"
+SOURCE_ICON="$ROOT_DIR/../../assets/branding/app-icon-mymind-ios-2024.png"
+EXTENSION_ICON_DIR="$ROOT_DIR/../../legacy/chrome-extension/public"
 EXECUTABLE_SOURCE="$RELEASE_DIR/CosmogonyApp"
 EXECUTABLE_TARGET="$MACOS_DIR/$APP_NAME"
 ZIP_PATH="$DIST_DIR/$APP_NAME.zip"
@@ -31,26 +32,38 @@ rm -rf "$APP_DIR" "$ZIP_PATH"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 echo "Preparing app icon assets..."
+if [[ ! -f "$SOURCE_ICON" ]]; then
+  echo "Expected source icon not found: $SOURCE_ICON" >&2
+  exit 1
+fi
+
 mkdir -p "$ICONSET_DIR"
 rm -rf "$TEMP_ICONSET_DIR"
 mkdir -p "$TEMP_ICONSET_DIR"
+mkdir -p "$EXTENSION_ICON_DIR"
 
 generate_icon() {
   local size="$1"
   local name="$2"
-  sips -z "$size" "$size" "$SOURCE_ICON" --out "$ICONSET_DIR/$name" >/dev/null
+  local output_path="$3"
+  sips -z "$size" "$size" "$SOURCE_ICON" --out "$output_path/$name" >/dev/null
 }
 
-generate_icon 16 "icon_16x16.png"
-generate_icon 32 "icon_16x16@2x.png"
-generate_icon 32 "icon_32x32.png"
-generate_icon 64 "icon_32x32@2x.png"
-generate_icon 128 "icon_128x128.png"
-generate_icon 256 "icon_128x128@2x.png"
-generate_icon 256 "icon_256x256.png"
-generate_icon 512 "icon_256x256@2x.png"
-generate_icon 512 "icon_512x512.png"
-generate_icon 1024 "icon_512x512@2x.png"
+generate_icon 16 "icon-16.png" "$EXTENSION_ICON_DIR"
+generate_icon 32 "icon-32.png" "$EXTENSION_ICON_DIR"
+generate_icon 48 "icon-48.png" "$EXTENSION_ICON_DIR"
+generate_icon 128 "icon-128.png" "$EXTENSION_ICON_DIR"
+
+generate_icon 16 "icon_16x16.png" "$ICONSET_DIR"
+generate_icon 32 "icon_16x16@2x.png" "$ICONSET_DIR"
+generate_icon 32 "icon_32x32.png" "$ICONSET_DIR"
+generate_icon 64 "icon_32x32@2x.png" "$ICONSET_DIR"
+generate_icon 128 "icon_128x128.png" "$ICONSET_DIR"
+generate_icon 256 "icon_128x128@2x.png" "$ICONSET_DIR"
+generate_icon 256 "icon_256x256.png" "$ICONSET_DIR"
+generate_icon 512 "icon_256x256@2x.png" "$ICONSET_DIR"
+generate_icon 512 "icon_512x512.png" "$ICONSET_DIR"
+generate_icon 1024 "icon_512x512@2x.png" "$ICONSET_DIR"
 
 for icon_name in \
   icon_16x16.png \

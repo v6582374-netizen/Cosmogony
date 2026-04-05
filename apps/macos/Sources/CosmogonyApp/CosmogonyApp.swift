@@ -17,12 +17,19 @@ private extension AppAppearance {
 @main
 struct CosmogonyApp: App {
     @StateObject private var model = AppModel.bootstrap()
+    private let windowCoordinator = AppWindowCoordinator.shared
 
     var body: some Scene {
-        WindowGroup("Cosmogony") {
+        WindowGroup("Cosmogony", id: "main") {
             RootView()
                 .environmentObject(model)
                 .preferredColorScheme(model.settings.appearance.preferredColorScheme)
+                .background(
+                    MainWindowRegistrationView(coordinator: windowCoordinator)
+                )
+                .task {
+                    windowCoordinator.bind(model: model)
+                }
         }
 
         Settings {
@@ -38,6 +45,13 @@ struct CosmogonyApp: App {
                 Text(model.statusMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Divider()
+                Button("Open Recall") {
+                    model.presentRecallOverlay()
+                }
+                Button("Open Backstage") {
+                    model.activateBackstageHandler?()
+                }
                 Divider()
                 Button("Capture Current Page") {
                     model.captureCurrentPage()

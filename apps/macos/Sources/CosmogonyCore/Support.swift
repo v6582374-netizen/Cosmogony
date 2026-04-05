@@ -52,6 +52,23 @@ public enum PlatformBucket: String, Codable, CaseIterable, Identifiable, Sendabl
         case .otherWeb: "其余网页"
         }
     }
+
+    public var searchAliases: [String] {
+        switch self {
+        case .xPosts:
+            return ["x", "x.com", "twitter", "tweet", "tweets", "推特", "推文", "x 帖子"]
+        case .rednote:
+            return ["xiaohongshu", "rednote", "小红书", "红薯", "种草"]
+        case .wechat:
+            return ["wechat", "weixin", "微信", "公众号", "微信公众号"]
+        case .douyin:
+            return ["douyin", "抖音", "短视频"]
+        case .youtube:
+            return ["youtube", "you tube", "yt", "youtu.be", "油管", "优兔", "视频平台"]
+        case .otherWeb:
+            return ["网页", "web", "page", "site"]
+        }
+    }
 }
 
 public enum PlatformFilter: Equatable, Sendable {
@@ -100,12 +117,14 @@ public enum ProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
 
 public enum SearchMode: String, Sendable {
     case lexicalFallback = "lexical_fallback"
-    case embeddingReady = "embedding_ready"
+    case semanticIndexReady = "semantic_index_ready"
+    case semanticUnavailable = "semantic_unavailable"
 
     public var label: String {
         switch self {
         case .lexicalFallback: "Local lexical/taxonomy"
-        case .embeddingReady: "Embedding-ready"
+        case .semanticIndexReady: "AI semantic search"
+        case .semanticUnavailable: "AI unavailable"
         }
     }
 }
@@ -142,8 +161,10 @@ public struct KeyCombination: Codable, Hashable, Sendable {
     public var option: Bool
     public var control: Bool
 
-    public static let captureCurrentPageDefault = KeyCombination(keyCode: UInt32(kVK_ANSI_S), command: true, shift: true, option: false, control: false)
-    public static let captureClipboardDefault = KeyCombination(keyCode: UInt32(kVK_ANSI_V), command: true, shift: true, option: false, control: false)
+    public static let openRecallOverlayDefault = KeyCombination(keyCode: UInt32(kVK_ANSI_S), command: true, shift: true, option: false, control: false)
+    public static let captureCurrentPageDefault = openRecallOverlayDefault
+    public static let legacyCaptureClipboardDefault = KeyCombination(keyCode: UInt32(kVK_ANSI_V), command: true, shift: true, option: false, control: false)
+    public static let captureClipboardDefault = KeyCombination(keyCode: UInt32(kVK_ANSI_V), command: false, shift: true, option: false, control: true)
 
     public init(keyCode: UInt32, command: Bool, shift: Bool, option: Bool, control: Bool) {
         self.keyCode = keyCode
@@ -210,43 +231,66 @@ extension UInt32 {
 }
 
 public enum ShortcutAction: String, CaseIterable, Identifiable, Sendable {
-    case captureCurrentPage
+    case openRecallOverlay
     case captureClipboard
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
-        case .captureCurrentPage: "剪藏当前网页"
+        case .openRecallOverlay: "唤起 Recall 蒙版"
         case .captureClipboard: "剪藏剪贴板"
         }
     }
 }
 
 public struct ShortcutSettings: Codable, Equatable, Sendable {
-    public var captureCurrentPage: KeyCombination = .captureCurrentPageDefault
+    public var openRecallOverlay: KeyCombination = .openRecallOverlayDefault
     public var captureClipboard: KeyCombination = .captureClipboardDefault
 
     public init(
-        captureCurrentPage: KeyCombination = .captureCurrentPageDefault,
+        openRecallOverlay: KeyCombination = .openRecallOverlayDefault,
         captureClipboard: KeyCombination = .captureClipboardDefault
     ) {
-        self.captureCurrentPage = captureCurrentPage
+        self.openRecallOverlay = openRecallOverlay
         self.captureClipboard = captureClipboard
     }
 
     public func conflictMessage() -> String? {
-        guard captureCurrentPage == captureClipboard else { return nil }
+        guard openRecallOverlay == captureClipboard else { return nil }
         return "两个全局快捷键不能相同。"
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case openRecallOverlay
+        case captureClipboard
+        case captureCurrentPage
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        openRecallOverlay =
+            try container.decodeIfPresent(KeyCombination.self, forKey: .openRecallOverlay) ??
+            container.decodeIfPresent(KeyCombination.self, forKey: .captureCurrentPage) ??
+            .openRecallOverlayDefault
+        captureClipboard =
+            try container.decodeIfPresent(KeyCombination.self, forKey: .captureClipboard) ??
+            .captureClipboardDefault
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(openRecallOverlay, forKey: .openRecallOverlay)
+        try container.encode(captureClipboard, forKey: .captureClipboard)
     }
 }
 
 public struct CaptureSettings: Codable, Equatable, Sendable {
     public var enrichPublicPages = true
     public var preferBridgeRichCapture = true
-    public var maxStoredCharacters = 12_000
+    public var maxStoredCharacters = 80_000
 
-    public init(enrichPublicPages: Bool = true, preferBridgeRichCapture: Bool = true, maxStoredCharacters: Int = 12_000) {
+    public init(enrichPublicPages: Bool = true, preferBridgeRichCapture: Bool = true, maxStoredCharacters: Int = 80_000) {
         self.enrichPublicPages = enrichPublicPages
         self.preferBridgeRichCapture = preferBridgeRichCapture
         self.maxStoredCharacters = maxStoredCharacters
@@ -332,10 +376,72 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
 }
 
 public enum AppOverlay: String, Identifiable, Sendable {
-    case settings
     case clipDetail
 
     public var id: String { rawValue }
+}
+
+public enum OverlayMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case recall
+    case todo
+    case promptLibrary
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .recall:
+            "Recall"
+        case .todo:
+            "Todo"
+        case .promptLibrary:
+            "Prompts"
+        }
+    }
+}
+
+public enum BackstageModule: String, Codable, CaseIterable, Identifiable, Sendable {
+    case clips
+    case todo
+    case promptLibrary
+    case settings
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .clips:
+            "Clips"
+        case .todo:
+            "Todo"
+        case .promptLibrary:
+            "Prompt Library"
+        case .settings:
+            "Settings"
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .clips:
+            return "square.stack.3d.up"
+        case .todo:
+            return "checklist"
+        case .promptLibrary:
+            return "text.badge.star"
+        case .settings:
+            return "slider.horizontal.3"
+        }
+    }
+}
+
+public struct OverlayToast: Identifiable, Equatable, Sendable {
+    public let id = UUID()
+    public var message: String
+
+    public init(message: String) {
+        self.message = message
+    }
 }
 
 public struct AppSettings: Codable, Equatable, Sendable {
@@ -436,6 +542,121 @@ public struct Space: Codable, Identifiable, Equatable, FetchableRecord, Persista
     }
 }
 
+public struct TodoItem: Codable, Identifiable, Equatable, FetchableRecord, PersistableRecord, Sendable {
+    public static let databaseTableName = "todo_items"
+
+    public var id: String
+    public var title: String
+    public var createdAt: Date
+    public var updatedAt: Date
+    public var completedAt: Date?
+    public var visualSeed: Int
+
+    public init(
+        id: String = UUID().uuidString,
+        title: String,
+        createdAt: Date = .now,
+        updatedAt: Date = .now,
+        completedAt: Date? = nil,
+        visualSeed: Int = Int.random(in: 0...999_999)
+    ) {
+        self.id = id
+        self.title = title
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.completedAt = completedAt
+        self.visualSeed = visualSeed
+    }
+
+    public var isCompleted: Bool {
+        completedAt != nil
+    }
+
+    public init(row: Row) {
+        id = row["id"]
+        title = row["title"] ?? ""
+        createdAt = Date(timeIntervalSince1970: row["created_at"] ?? Date().timeIntervalSince1970)
+        updatedAt = Date(timeIntervalSince1970: row["updated_at"] ?? Date().timeIntervalSince1970)
+        if let completedAtValue: Double = row["completed_at"] {
+            completedAt = Date(timeIntervalSince1970: completedAtValue)
+        } else {
+            completedAt = nil
+        }
+        visualSeed = Int(row["visual_seed"] ?? 0)
+    }
+
+    public func encode(to container: inout PersistenceContainer) {
+        container["id"] = id
+        container["title"] = title
+        container["created_at"] = createdAt.timeIntervalSince1970
+        container["updated_at"] = updatedAt.timeIntervalSince1970
+        container["completed_at"] = completedAt?.timeIntervalSince1970
+        container["visual_seed"] = visualSeed
+    }
+}
+
+public struct PromptLibraryItem: Codable, Identifiable, Equatable, FetchableRecord, PersistableRecord, Sendable {
+    public static let databaseTableName = "prompt_library_items"
+
+    public var id: String
+    public var title: String
+    public var content: String
+    public var sourceLabel: String
+    public var sourceURL: String
+    public var createdAt: Date
+    public var updatedAt: Date
+    public var isSystem: Bool
+
+    public init(
+        id: String = UUID().uuidString,
+        title: String,
+        content: String,
+        sourceLabel: String = "",
+        sourceURL: String = "",
+        createdAt: Date = .now,
+        updatedAt: Date = .now,
+        isSystem: Bool = false
+    ) {
+        self.id = id
+        self.title = title
+        self.content = content
+        self.sourceLabel = sourceLabel
+        self.sourceURL = sourceURL
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.isSystem = isSystem
+    }
+
+    public var previewText: String {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 170 else { return trimmed }
+        let index = trimmed.index(trimmed.startIndex, offsetBy: 170)
+        return String(trimmed[..<index]) + "…"
+    }
+
+    public init(row: Row) {
+        id = row["id"]
+        title = row["title"] ?? ""
+        content = row["content"] ?? ""
+        sourceLabel = row["source_label"] ?? ""
+        sourceURL = row["source_url"] ?? ""
+        createdAt = Date(timeIntervalSince1970: row["created_at"] ?? Date().timeIntervalSince1970)
+        updatedAt = Date(timeIntervalSince1970: row["updated_at"] ?? Date().timeIntervalSince1970)
+        isSystem = row["is_system"] ?? false
+    }
+
+    public func encode(to container: inout PersistenceContainer) {
+        container["id"] = id
+        container["title"] = title
+        container["content"] = content
+        container["source_label"] = sourceLabel
+        container["source_url"] = sourceURL
+        container["created_at"] = createdAt.timeIntervalSince1970
+        container["updated_at"] = updatedAt.timeIntervalSince1970
+        container["is_system"] = isSystem
+    }
+}
+
 public struct ProviderProfile: Codable, Identifiable, Equatable, FetchableRecord, PersistableRecord, Sendable {
     public static let databaseTableName = "provider_profiles"
 
@@ -522,6 +743,7 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
     public var status: ClipStatus
     public var isPinned: Bool
     public var trashedAt: Date?
+    public var readingPayloadJSON: String
     public var searchText: String
 
     public init(
@@ -543,7 +765,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         note: String,
         status: ClipStatus,
         isPinned: Bool = false,
-        trashedAt: Date? = nil
+        trashedAt: Date? = nil,
+        readingPayloadJSON: String = ""
     ) {
         self.id = id
         self.sourceType = sourceType
@@ -564,7 +787,9 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         self.status = status
         self.isPinned = isPinned
         self.trashedAt = trashedAt
-        self.searchText = ClipItem.composeSearchText(title: title, domain: domain, excerpt: excerpt, content: content, category: category, tags: tags, spaceName: spaceName, note: note)
+        self.readingPayloadJSON = readingPayloadJSON
+        self.searchText = ""
+        self.searchText = SearchDocumentBuilder.build(clip: self).lookupText
     }
 
     public init(row: Row) {
@@ -591,6 +816,7 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         } else {
             trashedAt = nil
         }
+        readingPayloadJSON = row["reading_payload_json"] ?? ""
         searchText = row["search_text"] ?? ""
     }
 
@@ -614,20 +840,12 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         container["status"] = status.rawValue
         container["is_pinned"] = isPinned
         container["trashed_at"] = trashedAt?.timeIntervalSince1970
+        container["reading_payload_json"] = readingPayloadJSON
         container["search_text"] = searchText
     }
 
     public mutating func refreshSearchText() {
-        searchText = ClipItem.composeSearchText(
-            title: title,
-            domain: domain,
-            excerpt: excerpt,
-            content: content,
-            category: category,
-            tags: tags,
-            spaceName: spaceName,
-            note: note
-        )
+        searchText = SearchDocumentBuilder.build(clip: self).lookupText
     }
 
     public static func composeSearchText(
@@ -643,6 +861,51 @@ public struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, Persi
         [title, domain, excerpt, content, category, tags.joined(separator: " "), spaceName, note]
             .joined(separator: " ")
             .lowercased()
+    }
+
+    public var isPlainTextClipboardCapture: Bool {
+        sourceType == .clipboard && (URL(string: url)?.scheme?.lowercased() == "clipboard")
+    }
+
+    public var readingPayload: ClipboardReadingPayload? {
+        guard !readingPayloadJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let data = readingPayloadJSON.data(using: .utf8)
+        else {
+            return nil
+        }
+        return try? JSONDecoder().decode(ClipboardReadingPayload.self, from: data)
+    }
+}
+
+public struct ClipboardReadingParagraph: Codable, Equatable, Sendable {
+    public var original: String
+    public var translation: String
+
+    public init(original: String, translation: String) {
+        self.original = original
+        self.translation = translation
+    }
+}
+
+public struct ClipboardReadingPayload: Codable, Equatable, Sendable {
+    public var detectedLanguage: String
+    public var titleChinese: String
+    public var summaryChinese: String
+    public var isPartial: Bool
+    public var paragraphs: [ClipboardReadingParagraph]
+
+    public init(
+        detectedLanguage: String,
+        titleChinese: String,
+        summaryChinese: String,
+        isPartial: Bool,
+        paragraphs: [ClipboardReadingParagraph]
+    ) {
+        self.detectedLanguage = detectedLanguage
+        self.titleChinese = titleChinese
+        self.summaryChinese = summaryChinese
+        self.isPartial = isPartial
+        self.paragraphs = paragraphs
     }
 }
 
@@ -768,44 +1031,231 @@ public enum PlatformClassifier {
 }
 
 public enum SearchScorer {
-    public static func mode(settings: AppSettings, profiles: [ProviderProfile]) -> SearchMode {
-        guard
-            let id = settings.defaultEmbeddingProfileID,
-            let profile = profiles.first(where: { $0.id == id }),
-            profile.supportsEmbeddings
-        else {
+    public static func mode(settings: AppSettings, profiles: [ProviderProfile], providerSecrets: [String: String] = [:]) -> SearchMode {
+        guard let id = settings.defaultEmbeddingProfileID else {
             return .lexicalFallback
         }
-        return .embeddingReady
+        guard let profile = profiles.first(where: { $0.id == id }) else {
+            return .semanticUnavailable
+        }
+        guard profile.supportsEmbeddings else {
+            return .lexicalFallback
+        }
+        guard !providerSecrets.isEmpty else {
+            return .semanticIndexReady
+        }
+        let secret = (providerSecrets[profile.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return secret.isEmpty ? .semanticUnavailable : .semanticIndexReady
     }
 
     public static func score(_ clip: ClipItem, query: String) -> Int {
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return 0 }
+        let rewrite = SearchQueryRewriter.rewrite(
+            query: query,
+            aliasRules: SearchAliasRule.systemDefaults(),
+            now: .now,
+            timeZone: .current
+        )
+        return Int((candidate(for: clip, rewrite: rewrite).localScore * 100).rounded())
+    }
 
-        var total = 0
-        let haystack = clip.searchText
-
-        if clip.title.lowercased().contains(normalized) {
-            total += 80
-        }
-        if clip.domain.lowercased().contains(normalized) {
-            total += 50
-        }
-        if clip.category.lowercased().contains(normalized) {
-            total += 40
-        }
-        if clip.tags.contains(where: { $0.lowercased().contains(normalized) }) {
-            total += 35
+    package static func candidate(for clip: ClipItem, rewrite: QueryRewrite, now: Date = .now) -> SearchCandidate {
+        let document = SearchDocumentBuilder.build(clip: clip)
+        guard !rewrite.normalizedQuery.isEmpty else {
+            return SearchCandidate(clipID: clip.id, recencyScore: recencyScore(for: clip, now: now), matchedSnippet: fallbackSnippet(for: clip))
         }
 
-        for token in normalized.split(separator: " ").map(String.init) where !token.isEmpty {
-            if haystack.contains(token) {
-                total += 10
+        if rewrite.excludedTerms.contains(where: { !($0.isEmpty) && document.lookupText.contains($0) }) {
+            return SearchCandidate(clipID: clip.id)
+        }
+
+        var lexicalScore = 0.0
+        var aliasScore = 0.0
+        var taxonomyScore = 0.0
+        var exactScore = 0.0
+        var matched = Set<SearchMatchedField>()
+
+        let normalizedTitle = SemanticSearchToolkit.normalizedLookup(clip.title)
+        let normalizedDomain = SemanticSearchToolkit.normalizedLookup(clip.domain)
+        let normalizedURL = SemanticSearchToolkit.normalizedLookup(clip.url)
+        let normalizedCategory = SemanticSearchToolkit.normalizedLookup(clip.category)
+        let normalizedTags = clip.tags.map(SemanticSearchToolkit.normalizedLookup)
+        let normalizedNote = SemanticSearchToolkit.normalizedLookup(clip.note)
+        let normalizedSpace = SemanticSearchToolkit.normalizedLookup(clip.spaceName)
+        let normalizedPlatform = SemanticSearchToolkit.normalizedLookup(clip.platformBucket.title)
+        let chineseLookup = SemanticSearchToolkit.normalizedLookup([
+            clip.readingPayload?.titleChinese ?? "",
+            clip.readingPayload?.summaryChinese ?? ""
+        ].joined(separator: " "))
+
+        let query = rewrite.normalizedQuery
+        if normalizedTitle == query || normalizedDomain == query || normalizedURL == query {
+            exactScore += 0.65
+            matched.insert(.exact)
+        }
+        if normalizedTitle.contains(query) {
+            lexicalScore += 0.42
+            matched.insert(.title)
+        }
+        if normalizedDomain.contains(query) {
+            lexicalScore += 0.2
+            matched.insert(.domain)
+        }
+        if normalizedURL.contains(query) {
+            lexicalScore += 0.14
+            matched.insert(.url)
+        }
+        if normalizedPlatform.contains(query) {
+            aliasScore += 0.32
+            matched.insert(.platform)
+        }
+        if document.aliasText.contains(query) {
+            aliasScore += 0.48
+            matched.insert(.alias)
+        }
+        if normalizedCategory.contains(query) {
+            taxonomyScore += 0.3
+            matched.insert(.category)
+        }
+        if normalizedTags.contains(where: { $0.contains(query) }) {
+            taxonomyScore += 0.24
+            matched.insert(.tag)
+        }
+        if normalizedNote.contains(query) {
+            lexicalScore += 0.12
+            matched.insert(.note)
+        }
+        if normalizedSpace.contains(query) {
+            taxonomyScore += 0.14
+            matched.insert(.space)
+        }
+        if document.summaryText.contains(query) {
+            lexicalScore += 0.18
+            matched.insert(.summary)
+        }
+        if !chineseLookup.isEmpty, chineseLookup.contains(query) {
+            lexicalScore += 0.18
+            matched.insert(.chineseSummary)
+        }
+        if document.contentText.contains(query) {
+            lexicalScore += 0.16
+            matched.insert(.content)
+        }
+
+        for term in rewrite.allTerms where term != query {
+            if normalizedTitle.contains(term) {
+                lexicalScore += 0.11
+                matched.insert(.title)
+            }
+            if normalizedDomain.contains(term) {
+                lexicalScore += 0.06
+                matched.insert(.domain)
+            }
+            if normalizedURL.contains(term) {
+                lexicalScore += 0.05
+                matched.insert(.url)
+            }
+            if document.aliasText.contains(term) {
+                aliasScore += 0.12
+                matched.insert(.alias)
+            }
+            if normalizedCategory.contains(term) {
+                taxonomyScore += 0.08
+                matched.insert(.category)
+            }
+            if normalizedTags.contains(where: { $0.contains(term) }) {
+                taxonomyScore += 0.08
+                matched.insert(.tag)
+            }
+            if document.summaryText.contains(term) {
+                lexicalScore += 0.07
+                matched.insert(.summary)
+            }
+            if !chineseLookup.isEmpty, chineseLookup.contains(term) {
+                lexicalScore += 0.08
+                matched.insert(.chineseSummary)
+            }
+            if document.contentText.contains(term) {
+                lexicalScore += 0.06
+                matched.insert(.content)
             }
         }
 
-        return total
+        if !rewrite.requiredTerms.isEmpty {
+            let requiredMatches = rewrite.requiredTerms.filter { document.lookupText.contains($0) }
+            if requiredMatches.count == rewrite.requiredTerms.count {
+                exactScore += 0.08
+                matched.insert(.exact)
+            } else {
+                lexicalScore -= 0.12
+            }
+        }
+
+        var recency = recencyScore(for: clip, now: now)
+        if let timeRange = rewrite.timeRange {
+            if timeRange.contains(clip.capturedAt) {
+                recency = max(recency, 0.92)
+                matched.insert(.recency)
+            } else {
+                recency *= 0.25
+            }
+        }
+
+        let snippet = snippet(for: clip, document: document, rewrite: rewrite)
+        return SearchCandidate(
+            clipID: clip.id,
+            lexicalScore: clamp01(lexicalScore),
+            semanticScore: 0,
+            aliasScore: clamp01(aliasScore),
+            taxonomyScore: clamp01(taxonomyScore),
+            recencyScore: clamp01(recency),
+            exactScore: clamp01(exactScore),
+            matchedFields: Array(matched).sorted { $0.label < $1.label },
+            matchedSnippet: snippet
+        )
+    }
+
+    private static func snippet(for clip: ClipItem, document: SearchDocument, rewrite: QueryRewrite) -> String {
+        let lookupTerms = rewrite.allTerms.filter { !$0.isEmpty }
+        let orderedSources: [(original: String, lookup: String)] = [
+            (clip.aiSummary, document.summaryText),
+            (clip.excerpt, SemanticSearchToolkit.normalizedLookup(clip.excerpt)),
+            (clip.content, document.contentText),
+            (clip.readingPayload?.summaryChinese ?? "", SemanticSearchToolkit.normalizedLookup(clip.readingPayload?.summaryChinese ?? "")),
+            (clip.readingPayload?.titleChinese ?? "", SemanticSearchToolkit.normalizedLookup(clip.readingPayload?.titleChinese ?? "")),
+            (clip.title, SemanticSearchToolkit.normalizedLookup(clip.title))
+        ]
+
+        for source in orderedSources where !source.original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let term = lookupTerms.first(where: { source.lookup.contains($0) }),
+               let snippet = extractSnippet(from: source.original, term: term) {
+                return compactSummary(from: snippet)
+            }
+        }
+
+        return fallbackSnippet(for: clip)
+    }
+
+    private static func extractSnippet(from text: String, term: String) -> String? {
+        let normalized = SemanticSearchToolkit.normalizedLookup(text)
+        guard let range = normalized.range(of: term) else { return nil }
+        let startOffset = normalized.distance(from: normalized.startIndex, to: range.lowerBound)
+        let endOffset = normalized.distance(from: normalized.startIndex, to: range.upperBound)
+        let lowerBound = text.index(text.startIndex, offsetBy: max(0, startOffset - 72), limitedBy: text.endIndex) ?? text.startIndex
+        let upperBound = text.index(text.startIndex, offsetBy: min(text.count, endOffset + 96), limitedBy: text.endIndex) ?? text.endIndex
+        return String(text[lowerBound..<upperBound])
+    }
+
+    private static func fallbackSnippet(for clip: ClipItem) -> String {
+        compactSummary(from: clip.aiSummary.isEmpty ? clip.excerpt.isEmpty ? clip.title : clip.excerpt : clip.aiSummary)
+    }
+
+    private static func recencyScore(for clip: ClipItem, now: Date) -> Double {
+        let ageDays = max(0, now.timeIntervalSince(clip.capturedAt) / 86_400)
+        return clamp01(exp(-ageDays / 45))
+    }
+
+    private static func clamp01(_ value: Double) -> Double {
+        max(0, min(1, value))
     }
 }
 
@@ -841,4 +1291,46 @@ public func compactSummary(from text: String) -> String {
     }
     let index = trimmed.index(trimmed.startIndex, offsetBy: 220)
     return String(trimmed[..<index]) + "..."
+}
+
+public func isLikelyEnglishText(_ text: String) -> Bool {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, !CosmoTextClassifier.containsChinese(trimmed) else {
+        return false
+    }
+
+    let asciiLetters = trimmed.unicodeScalars.filter { scalar in
+        (65...90).contains(Int(scalar.value)) || (97...122).contains(Int(scalar.value))
+    }.count
+    let nonWhitespace = trimmed.unicodeScalars.filter { !CharacterSet.whitespacesAndNewlines.contains($0) }.count
+    guard asciiLetters >= 24, nonWhitespace > 0 else {
+        return false
+    }
+
+    return Double(asciiLetters) / Double(nonWhitespace) >= 0.45
+}
+
+public func clipboardDisplayTitle(from text: String, limit: Int = 88) -> String {
+    let normalized = text
+        .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalized.isEmpty else { return "Clipboard Capture" }
+    if normalized.count <= limit {
+        return normalized
+    }
+    let index = normalized.index(normalized.startIndex, offsetBy: limit)
+    return String(normalized[..<index]) + "..."
+}
+
+public func plainTextParagraphs(from text: String) -> [String] {
+    let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+    return normalized
+        .components(separatedBy: "\n\n")
+        .map {
+            $0
+                .replacingOccurrences(of: "\n[ \t]+", with: "\n", options: .regularExpression)
+                .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        .filter { !$0.isEmpty }
 }

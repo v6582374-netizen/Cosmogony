@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 private enum CosmoPalette {
@@ -32,25 +33,16 @@ struct CardSurface<Content: View>: View {
 
     var body: some View {
         content
-            .padding(20)
+            .padding(18)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                CosmoPalette.fog.opacity(0.90),
-                                CosmoPalette.surface
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                Rectangle()
+                    .fill(CosmoTheme.panelGradient(tier: .workspace, tone: .neutral))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .strokeBorder(CosmoPalette.line, lineWidth: 1)
+                        Rectangle()
+                            .strokeBorder(CosmoTheme.divider, lineWidth: 1)
                     )
-                    .shadow(color: CosmoPalette.shadow, radius: 18, x: 0, y: 14)
+                    .shadow(color: CosmoTheme.panelShadow.opacity(0.72), radius: 14, x: 0, y: 8)
             )
     }
 }
@@ -120,17 +112,43 @@ private struct SurfaceButtonStyle: ButtonStyle {
         configuration.label
             .foregroundStyle(foreground)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                Rectangle()
                     .fill(fill)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        Rectangle()
                             .strokeBorder(border, lineWidth: 1)
                     )
             )
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .scaleEffect(configuration.isPressed ? 0.992 : 1)
             .opacity(configuration.isPressed ? 0.94 : 1)
-            .shadow(color: CosmoPalette.shadow.opacity(configuration.isPressed ? 0.45 : 1), radius: 10, x: 0, y: 8)
-            .animation(.spring(response: 0.22, dampingFraction: 0.82), value: configuration.isPressed)
+            .shadow(color: CosmoTheme.panelShadow.opacity(configuration.isPressed ? 0.35 : 0.68), radius: 8, x: 0, y: 4)
+            .animation(.spring(response: 0.20, dampingFraction: 0.86), value: configuration.isPressed)
+    }
+}
+
+private struct StatusToast: View {
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(CosmoTheme.industrialGold)
+            Text(message)
+                .cosmoUIFont(message, size: 13, weight: .bold)
+                .foregroundStyle(CosmoTheme.bone)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 13)
+        .background(
+            RoundedRectangle(cornerRadius: CosmoRadius.lg, style: .continuous)
+                .fill(CosmoTheme.panelGradient(tier: .chrome, tone: .neutral))
+                .overlay(
+                    RoundedRectangle(cornerRadius: CosmoRadius.lg, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                )
+        )
+        .shadow(color: Color.black.opacity(0.24), radius: 18, x: 0, y: 12)
     }
 }
 
@@ -193,15 +211,24 @@ private struct SidebarButtonStyle: ButtonStyle {
 
 private struct SearchField: View {
     @Binding var text: String
+    let isSearching: Bool
+    let placeholder: String
+    let onSubmit: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(CosmoPalette.textSecondary)
-            TextField("Search title, domain, tags, notes…", text: $text)
+            TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
                 .cosmoInputFont()
                 .foregroundStyle(CosmoPalette.ink)
+                .onSubmit(onSubmit)
+
+            if isSearching {
+                ProgressView()
+                    .controlSize(.small)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -216,49 +243,186 @@ private struct SearchField: View {
     }
 }
 
-private struct TopBarMenu<Content: View>: View {
+private struct DropdownItemButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(configuration.isPressed ? CosmoPalette.surfaceSoft : Color.clear)
+            )
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.spring(response: 0.2, dampingFraction: 0.82), value: configuration.isPressed)
+    }
+}
+
+private struct HoverDropdownMenu<Content: View>: View {
+    let menuID: String
     let title: String
     let value: String
+    let isTemporarilyDisabled: Bool
+    @Binding var activeMenuID: String?
     @ViewBuilder var content: Content
+    @State private var isHoveringControl = false
+    @State private var isHoveringPanel = false
+    @State private var collapseTask: Task<Void, Never>?
 
-    init(title: String, value: String, @ViewBuilder content: () -> Content) {
+    init(
+        menuID: String,
+        title: String,
+        value: String,
+        isTemporarilyDisabled: Bool = false,
+        activeMenuID: Binding<String?>,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.menuID = menuID
         self.title = title
         self.value = value
+        self.isTemporarilyDisabled = isTemporarilyDisabled
+        _activeMenuID = activeMenuID
         self.content = content()
     }
 
     var body: some View {
-        Menu {
-            content
-        } label: {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title.uppercased())
-                        .cosmoTextFont(title.uppercased(), size: 10, weight: .semibold, design: .rounded)
-                        .foregroundStyle(CosmoPalette.textSecondary)
-                    Text(value)
-                        .cosmoTextFont(value, size: 14, weight: .medium)
-                        .foregroundStyle(CosmoPalette.ink)
-                        .lineLimit(1)
-                }
-
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title.uppercased())
+                    .cosmoTextFont(title.uppercased(), size: 10, weight: .semibold, design: .rounded)
                     .foregroundStyle(CosmoPalette.textSecondary)
+                Text(value)
+                    .cosmoTextFont(value, size: 14, weight: .medium)
+                    .foregroundStyle(CosmoPalette.ink)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(CosmoPalette.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(CosmoPalette.line, lineWidth: 1)
-                    )
-            )
         }
-        .menuStyle(.borderlessButton)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(isExpanded ? CosmoPalette.surfaceStrong : CosmoPalette.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(isExpanded ? CosmoPalette.moss.opacity(0.35) : CosmoPalette.line, lineWidth: 1)
+                )
+        )
+        .shadow(color: CosmoPalette.shadow.opacity(isExpanded ? 0.9 : 0.55), radius: isExpanded ? 16 : 10, x: 0, y: isExpanded ? 12 : 8)
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .onTapGesture {
+            guard !isTemporarilyDisabled else { return }
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.84)) {
+                activeMenuID = isExpanded ? nil : menuID
+            }
+        }
+        .onHover { hovering in
+            isHoveringControl = hovering
+            updateExpandedState()
+        }
+        .overlay(alignment: .topLeading) {
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    content
+                }
+                .padding(8)
+                .frame(minWidth: 220, alignment: .leading)
+                .buttonStyle(DropdownItemButtonStyle())
+                .background(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    CosmoPalette.surfaceStrong,
+                                    CosmoPalette.fog.opacity(0.92)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .strokeBorder(CosmoPalette.line, lineWidth: 1)
+                        )
+                        .shadow(color: CosmoPalette.shadow, radius: 20, x: 0, y: 14)
+                )
+                .offset(y: 58)
+                .onHover { hovering in
+                    isHoveringPanel = hovering
+                    updateExpandedState()
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .zIndex(30)
+            }
+        }
+        .disabled(isTemporarilyDisabled)
+        .opacity(isTemporarilyDisabled ? 0.52 : 1)
+        .zIndex(isExpanded ? 40 : 1)
         .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var isExpanded: Bool {
+        activeMenuID == menuID
+    }
+
+    private func updateExpandedState() {
+        guard !isTemporarilyDisabled else {
+            collapseTask?.cancel()
+            activeMenuID = nil
+            return
+        }
+        let shouldExpand = isHoveringControl || isHoveringPanel
+        if shouldExpand {
+            collapseTask?.cancel()
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.84)) {
+                activeMenuID = menuID
+            }
+            return
+        }
+
+        collapseTask?.cancel()
+        collapseTask = Task {
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard !isHoveringControl, !isHoveringPanel, activeMenuID == menuID else { return }
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.84)) {
+                    activeMenuID = nil
+                }
+            }
+        }
+    }
+}
+
+private struct ClipRowAction: Identifiable {
+    let id = UUID()
+    let title: String
+    let systemImage: String
+    let tint: Color
+    let action: () -> Void
+}
+
+private struct ClipRowActionButton: View {
+    let action: ClipRowAction
+
+    var body: some View {
+        Button {
+            action.action()
+        } label: {
+            Image(systemName: action.systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(action.tint)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(action.tint.opacity(0.13))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(action.tint.opacity(0.22), lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .help(action.title)
     }
 }
 
@@ -271,17 +435,27 @@ private struct FlowTagList: View {
     var body: some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
             ForEach(tags, id: \.self) { tag in
+                let selected = selectedTag.caseInsensitiveCompare(tag) == .orderedSame
                 Button {
                     selectedTag = tag
                 } label: {
                     Text(tag)
-                        .font(.caption.weight(.medium))
+                        .cosmoUIFont(tag, size: 11, weight: .bold, design: .rounded)
+                        .foregroundStyle(selected ? CosmoTheme.carbon : .white.opacity(0.82))
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         .contentShape(Capsule(style: .continuous))
                 }
-                .buttonStyle(FilterChipStyle(selected: selectedTag.caseInsensitiveCompare(tag) == .orderedSame))
+                .buttonStyle(.plain)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(selected ? CosmoTheme.industrialGold : Color.white.opacity(0.08))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(selected ? CosmoTheme.industrialGold.opacity(0.22) : Color.white.opacity(0.10), lineWidth: 1)
+                        )
+                )
             }
         }
     }
@@ -408,7 +582,7 @@ private struct PlatformShelfCard: View {
                             Button {
                                 onSelectClip(clip)
                             } label: {
-                                ClipStripRow(clip: clip, selected: false)
+                                ClipStripRow(clip: clip, selected: false, searchResult: nil, actions: [])
                             }
                             .buttonStyle(ClipCardButtonStyle(selected: false))
                         }
@@ -536,6 +710,8 @@ private struct ClipCanvasCard: View {
 private struct ClipStripRow: View {
     let clip: ClipItem
     let selected: Bool
+    let searchResult: AISearchResult?
+    let actions: [ClipRowAction]
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -548,9 +724,15 @@ private struct ClipStripRow: View {
                         .foregroundStyle(CosmoPalette.ink)
                         .lineLimit(1)
                     Spacer(minLength: 8)
-                    Text(clip.capturedAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(CosmoPalette.textSecondary)
+                    if let searchResult {
+                        Text(searchResult.source == .semantic ? "AI \(Int(searchResult.score * 100))%" : "Fallback \(Int(searchResult.score * 100))%")
+                            .cosmoTextFont(searchResult.source == .semantic ? "AI \(Int(searchResult.score * 100))%" : "Fallback \(Int(searchResult.score * 100))%", size: 11, weight: .semibold, design: .rounded)
+                            .foregroundStyle(searchResult.source == .semantic ? CosmoPalette.moss : CosmoPalette.clay)
+                    } else {
+                        Text(clip.capturedAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(CosmoPalette.textSecondary)
+                    }
                 }
 
                 HStack(spacing: 8) {
@@ -567,16 +749,33 @@ private struct ClipStripRow: View {
                     }
                 }
 
-                Text(clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary)
-                    .cosmoTextFont(clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary, size: 15)
+                Text(searchResult?.matchedSnippet.isEmpty == false ? searchResult?.matchedSnippet ?? "" : clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary)
+                    .cosmoTextFont(searchResult?.matchedSnippet.isEmpty == false ? searchResult?.matchedSnippet ?? "" : clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary, size: 15)
                     .foregroundStyle(CosmoPalette.textSecondary)
-                    .lineLimit(2)
+                    .lineLimit(searchResult == nil ? 2 : 3)
+
+                if let searchResult, !searchResult.matchedFields.isEmpty {
+                    Text(searchResult.matchedFields.prefix(4).map(\.label).joined(separator: " · "))
+                        .cosmoTextFont(searchResult.matchedFields.prefix(4).map(\.label).joined(separator: " · "), size: 12, weight: .medium)
+                        .foregroundStyle(searchResult.source == .semantic ? CosmoPalette.moss : CosmoPalette.textSecondary)
+                        .lineLimit(1)
+                }
             }
 
-            if selected {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(CosmoPalette.moss)
+            VStack(alignment: .trailing, spacing: 10) {
+                HStack(spacing: 8) {
+                    ForEach(actions) { action in
+                        ClipRowActionButton(action: action)
+                    }
+                }
+
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(CosmoPalette.moss)
+                } else {
+                    Spacer(minLength: 0)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -641,50 +840,104 @@ private struct SettingsSidebarButtonStyle: ButtonStyle {
 
 public struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var activeTopMenuID: String?
+    @State private var transientStatusMessage: String?
+    @State private var statusToastTask: Task<Void, Never>?
+    @State private var isTimeboxPopoverPresented = false
 
     private let filters: [PlatformFilter] = [.all] + PlatformBucket.allCases.map(PlatformFilter.bucket)
 
     public init() {}
 
     private var canvasHeadline: String {
+        if model.backstageModule == .promptLibrary {
+            return "Prompt Library"
+        }
+        if model.backstageModule == .todo {
+            return "Todo Console"
+        }
+        if model.backstageModule == .settings {
+            return "Settings"
+        }
+        if model.isAISearchActive {
+            return "Backstage Search Results"
+        }
         switch model.timeboxDraft.filter {
         case let .day(day) where Calendar.current.isDateInToday(day):
-            return "Today's Clips"
+            return "Today's Intake"
         default:
-            return "Matching Clips"
+            return "Working Set"
         }
     }
 
     private var canvasSubheadline: String {
+        if model.backstageModule == .promptLibrary {
+            return "这里是提示词库后台工作台：蜂巢视图负责快速调用，这里负责完整编辑、整理和后续扩充。"
+        }
+        if model.backstageModule == .todo {
+            return "待办事项被带回后台成为正式模块：更适合排队、重命名、完成和清空。"
+        }
+        if model.backstageModule == .settings {
+            return "设置现在直接进入后台工作台，不再作为一张独立弹层漂浮在界面上。"
+        }
+        if model.isAISearchActive {
+            return "Recall Overlay 的上下文已被带入后台，当前列表展示这次召回命中的工作结果。"
+        }
         switch model.timeboxDraft.filter {
         case let .day(day) where Calendar.current.isDateInToday(day):
-            return "主界面默认展示今天收进来的全部剪藏，便于先完成当天的信息归拢。"
+            return "后台默认先从今天的流入开始，方便把新增内容快速清点、修整和归档。"
         default:
-            return "当前全局视图命中的内容会在这里展开，顶部菜单负责主筛选，侧边补充辅助动作。"
+            return "这里展示的是适合继续整理的工作集合，顶部负责筛选，侧边负责辅助动作。"
         }
     }
 
     public var body: some View {
-        ZStack {
-            SoftBackground()
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                BackstageBackdrop(tone: backstageTone)
 
-            ScrollView {
-                VStack(spacing: 18) {
-                    topBar
+                HStack(alignment: .top, spacing: 12) {
+                    backstageRailView
+                        .frame(width: 96, alignment: .topLeading)
+                        .frame(maxHeight: .infinity, alignment: .topLeading)
 
-                    HStack(alignment: .top, spacing: 18) {
-                        sidebarPaneView
-                        contentCanvas
+                    if !model.isBackstageSidebarCollapsed {
+                        moduleSidebarView
+                            .frame(width: sidebarWidth, alignment: .topLeading)
+                            .frame(maxHeight: .infinity, alignment: .topLeading)
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                    }
+
+                    moduleWorkspaceView
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+                    if model.backstageModule == .clips {
+                        clipInspectorColumn
+                            .frame(maxHeight: .infinity, alignment: .topLeading)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
                     }
                 }
-                .padding(22)
-            }
+                .padding(16)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+                .animation(CosmoMotion.settle, value: model.isBackstageSidebarCollapsed)
+                .animation(CosmoMotion.settle, value: model.backstageModule)
 
-            if let activeOverlay = model.activeOverlay {
-                overlayBackdrop(activeOverlay)
+                if let activeOverlay = model.activeOverlay {
+                    overlayBackdrop(activeOverlay)
+                }
+
+                if let transientStatusMessage {
+                    VStack {
+                        StatusToast(message: transientStatusMessage)
+                        Spacer()
+                    }
+                    .padding(.top, 18)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(500)
+                }
             }
         }
-        .frame(minWidth: 1060, minHeight: 820)
+        .frame(minWidth: 1180, minHeight: 820)
         .alert(
             "Link already exists",
             isPresented: Binding(
@@ -708,7 +961,9 @@ public struct RootView: View {
                 .cosmoTextFont("发现相同链接已存在：\(existingTitle)\n\n你可以取消本次添加，或仍然继续保存。", size: 14)
         }
         .alert("Discard unsaved changes?", isPresented: $model.showUnsavedClipClosePrompt) {
-            Button("Continue Editing", role: .cancel) {}
+            Button("Continue Editing", role: .cancel) {
+                model.cancelPendingClipSelection()
+            }
             Button("Discard Changes", role: .destructive) {
                 model.discardUnsavedClipChangesAndClose()
             }
@@ -719,154 +974,1070 @@ public struct RootView: View {
         .onChange(of: model.selectedScope) { _, _ in model.refreshFilters() }
         .onChange(of: model.selectedPlatform) { _, _ in model.refreshFilters() }
         .onChange(of: model.selectedSpaceID) { _, _ in model.refreshFilters() }
-        .onChange(of: model.searchText) { _, _ in model.refreshFilters() }
+        .onChange(of: model.searchDraft) { _, _ in model.scheduleAISearch() }
         .onChange(of: model.timeboxDraft) { _, _ in model.refreshFilters() }
+        .onReceive(model.$statusMessage.dropFirst()) { message in
+            presentStatusToast(message)
+        }
     }
 
-    private var topBar: some View {
-        CardSurface {
-            HStack(alignment: .center, spacing: 12) {
-                SearchField(text: $model.searchText)
-                    .frame(maxWidth: .infinity)
+    private func presentStatusToast(_ message: String) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
 
-                Button {
-                    model.clearSearch()
-                } label: {
-                    Label("Clear", systemImage: "xmark.circle")
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        statusToastTask?.cancel()
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+            transientStatusMessage = trimmed
+        }
+
+        statusToastTask = Task {
+            try? await Task.sleep(for: .seconds(2.2))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    transientStatusMessage = nil
                 }
-                .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+            }
+        }
+    }
 
-                Button {
-                    model.resetPrimaryFilters()
-                } label: {
-                    Label("Reset To Today", systemImage: "arrow.counterclockwise")
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    private var currentSpace: Space? {
+        guard let selectedSpaceID = model.selectedSpaceID else { return nil }
+        return model.spaces.first(where: { $0.id == selectedSpaceID })
+    }
+
+    private var currentSpaceTone: SpaceTone {
+        if let currentSpace {
+            return CosmoTheme.tone(for: currentSpace.name)
+        }
+
+        if case let .bucket(bucket) = model.selectedPlatform {
+            return CosmoTheme.platformTone(for: bucket)
+        }
+
+        return .neutral
+    }
+
+    private var backstageTone: SpaceTone {
+        switch model.backstageModule {
+        case .clips:
+            return currentSpaceTone
+        case .todo:
+            return CosmoTheme.tone(for: "todo-console")
+        case .promptLibrary:
+            return CosmoTheme.tone(for: "prompt-library")
+        case .settings:
+            return .neutral
+        }
+    }
+
+    private var sidebarWidth: CGFloat {
+        switch model.backstageModule {
+        case .clips:
+            return 286
+        case .promptLibrary:
+            return 270
+        case .todo:
+            return 276
+        case .settings:
+            return 248
+        }
+    }
+
+    private var backstageRailView: some View {
+        BackstageRail(tone: backstageTone, padding: 12) {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("CG")
+                        .cosmoDisplayFont("CG", size: 28, weight: .bold)
+                        .foregroundStyle(backstageTone.accent)
+                    Text("Console")
+                        .cosmoUIFont("Console", size: 10, weight: .bold)
+                        .foregroundStyle(CosmoTheme.textTertiary)
                 }
-                .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
 
-                TopBarMenu(title: "Settings", value: model.selectedSettingsTab.title) {
-                    ForEach(SettingsTab.allCases) { tab in
-                        Button {
-                            model.openSettingsTab(tab)
-                        } label: {
-                            HStack {
-                                Text(tab.title)
-                                if model.selectedSettingsTab == tab {
-                                    Spacer(minLength: 10)
-                                    Image(systemName: "checkmark")
-                                }
+                RuleDivider(strong: true)
+
+                VStack(spacing: 4) {
+                    ForEach(BackstageModule.allCases) { module in
+                        RailButton(
+                            title: module.title,
+                            systemImage: module.systemImage,
+                            tone: backstageTone,
+                            isActive: model.backstageModule == module
+                        ) {
+                            withAnimation(CosmoMotion.settle) {
+                                model.openBackstageModule(module)
                             }
                         }
                     }
                 }
 
-                TopBarMenu(title: "Platforms", value: model.selectedPlatform.label) {
+                Spacer(minLength: 8)
+
+                if model.backstageModule == .clips {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(model.isAISearchContextActive ? "Query".uppercased() : "Visible".uppercased())
+                            .cosmoUIFont(model.isAISearchContextActive ? "Query" : "Visible", size: 10, weight: .bold)
+                            .foregroundStyle(CosmoTheme.textTertiary)
+                        Text(model.isAISearchContextActive ? (model.activeSearchQuery.isEmpty ? model.searchDraft : model.activeSearchQuery) : "\(model.displayedClips.count)")
+                            .cosmoTextFont(model.isAISearchContextActive ? (model.activeSearchQuery.isEmpty ? model.searchDraft : model.activeSearchQuery) : "\(model.displayedClips.count)", size: model.isAISearchContextActive ? 12 : 24, weight: model.isAISearchContextActive ? .medium : .semibold)
+                            .foregroundStyle(CosmoTheme.textPrimary)
+                            .lineLimit(model.isAISearchContextActive ? 3 : 1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 8)
+                }
+
+                Button {
+                    withAnimation(CosmoMotion.settle) {
+                        model.toggleBackstageSidebar()
+                    }
+                } label: {
+                    VStack(spacing: 6) {
+                        Image(systemName: model.isBackstageSidebarCollapsed ? "sidebar.left" : "sidebar.leading")
+                            .font(.system(size: 14, weight: .bold))
+                        Text(model.isBackstageSidebarCollapsed ? "Expand" : "Collapse")
+                            .cosmoUIFont(model.isBackstageSidebarCollapsed ? "Expand" : "Collapse", size: 10, weight: .bold)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .secondary))
+            }
+        }
+    }
+
+    private var moduleSidebarView: some View {
+        BackstageSidebar(tone: backstageTone, padding: 16) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.backstageModule.title)
+                            .cosmoDisplayFont(model.backstageModule.title, size: 20, weight: .semibold)
+                            .foregroundStyle(CosmoTheme.textPrimary)
+                        Text(sidebarSubtitle)
+                            .cosmoTextFont(sidebarSubtitle, size: 12)
+                            .foregroundStyle(CosmoTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        withAnimation(CosmoMotion.settle) {
+                            model.setBackstageSidebarCollapsed(true)
+                        }
+                    } label: {
+                        Image(systemName: "sidebar.leading")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .ghost))
+                }
+
+                RuleDivider(strong: true)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        moduleSidebarSections
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(.trailing, 2)
+                }
+                .scrollIndicators(.never)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var moduleSidebarSections: some View {
+        switch model.backstageModule {
+        case .clips:
+            clipsSidebarSections
+        case .promptLibrary:
+            promptSidebarSections
+        case .todo:
+            todoSidebarSections
+        case .settings:
+            settingsSidebarSections
+        }
+    }
+
+    @ViewBuilder
+    private var moduleWorkspaceView: some View {
+        switch model.backstageModule {
+        case .clips:
+            clipsWorkspaceView
+        case .promptLibrary:
+            promptWorkspaceView
+        case .todo:
+            todoWorkspaceView
+        case .settings:
+            settingsWorkspaceView
+        }
+    }
+
+    private var clipsWorkspaceView: some View {
+        WorkbenchSurface(role: .workspace, tone: backstageTone, padding: 20) {
+            VStack(alignment: .leading, spacing: 16) {
+                WorkbenchHeader(title: canvasHeadline, subtitle: canvasSubheadline, tone: backstageTone) {
+                    HStack(spacing: 8) {
+                        ContextChip(title: "Visible", value: "\(model.displayedClips.count)", tone: backstageTone, isActive: true, icon: "square.grid.2x2")
+                        if model.isAISearchActive {
+                            ContextChip(title: "Mode", value: model.searchMode.label, tone: backstageTone, isActive: true, icon: "sparkles")
+                        }
+                        Button {
+                            model.presentRecallOverlay()
+                        } label: {
+                            Label("Recall", systemImage: "sparkles")
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .secondary))
+
+                        Button {
+                            model.captureCurrentPage()
+                        } label: {
+                            Label("Capture Page", systemImage: "safari")
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .primary))
+
+                        Button {
+                            model.captureClipboard()
+                        } label: {
+                            Label("Capture Clipboard", systemImage: "doc.on.clipboard")
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .secondary))
+                    }
+                }
+
+                WorkbenchInputShell(tone: backstageTone) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(backstageTone.accent)
+
+                        TextField("搜索整个库，用自然语言描述你还记得的碎片", text: $model.searchDraft)
+                            .textFieldStyle(.plain)
+                            .cosmoInputFont(size: 15)
+                            .foregroundStyle(CosmoTheme.textPrimary)
+                            .onSubmit {
+                                Task {
+                                    await model.submitAISearch(forceImmediate: true)
+                                }
+                            }
+
+                        if model.aiSearchStatus.isBusy {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else if !model.searchDraft.isEmpty {
+                            Button {
+                                model.clearSearch()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                            .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .ghost))
+                        }
+                    }
+                }
+
+                activeClipsContextStrip
+
+                RuleDivider(strong: true)
+
+                if model.displayedClips.isEmpty {
+                    ContentUnavailableView(
+                        model.isAISearchActive ? "No AI matches found" : "No clips found",
+                        systemImage: "tray",
+                        description: Text(model.isAISearchActive ? "可以尝试换一种自然语言描述，或者从左侧折叠轨重置筛选。" : "调整左侧条件，或先通过网页 / 剪贴板继续采集。").cosmoTextFont(model.isAISearchActive ? "可以尝试换一种自然语言描述，或者从左侧折叠轨重置筛选。" : "调整左侧条件，或先通过网页 / 剪贴板继续采集。", size: 14)
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            if model.isAISearchActive {
+                                ForEach(model.filteredAISearchResults) { result in
+                                    clipRowButton(clip: result.clip, searchResult: result)
+                                }
+                            } else {
+                                ForEach(model.clips) { clip in
+                                    clipRowButton(clip: clip, searchResult: nil)
+                                }
+                            }
+                        }
+                        .padding(.trailing, 2)
+                    }
+                    .scrollIndicators(.never)
+                }
+            }
+        }
+    }
+
+    private var promptWorkspaceView: some View {
+        WorkbenchSurface(role: .workspace, tone: backstageTone, padding: 20) {
+            VStack(alignment: .leading, spacing: 16) {
+                WorkbenchHeader(title: canvasHeadline, subtitle: canvasSubheadline, tone: backstageTone) {
+                    HStack(spacing: 8) {
+                        Button {
+                            model.createPromptLibraryItem()
+                        } label: {
+                            Label("New Prompt", systemImage: "plus")
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .primary))
+
+                        Button {
+                            model.presentRecallOverlay(initialMode: .promptLibrary)
+                        } label: {
+                            Label("Open Hive", systemImage: "hexagon")
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .secondary))
+                    }
+                }
+
+                RuleDivider(strong: true)
+
+                PromptLibraryWorkbenchView()
+                    .environmentObject(model)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+    }
+
+    private var todoWorkspaceView: some View {
+        WorkbenchSurface(role: .workspace, tone: backstageTone, padding: 20) {
+            VStack(alignment: .leading, spacing: 16) {
+                WorkbenchHeader(title: canvasHeadline, subtitle: canvasSubheadline, tone: backstageTone) {
+                    HStack(spacing: 8) {
+                        ContextChip(title: "Pending", value: "\(model.todoItems.count)", tone: backstageTone, isActive: true, icon: "checklist")
+                        Button {
+                            model.presentRecallOverlay(initialMode: .todo)
+                        } label: {
+                            Label("Open Cloud", systemImage: "sparkles")
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .secondary))
+                    }
+                }
+
+                RuleDivider(strong: true)
+
+                TodoWorkbenchView(tone: backstageTone)
+                    .environmentObject(model)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+    }
+
+    private var settingsWorkspaceView: some View {
+        WorkbenchSurface(role: .workspace, tone: backstageTone, padding: 20) {
+            VStack(alignment: .leading, spacing: 16) {
+                WorkbenchHeader(title: canvasHeadline, subtitle: canvasSubheadline, tone: backstageTone) {
+                    ContextChip(title: "Current Tab", value: model.selectedSettingsTab.title, tone: backstageTone, isActive: true, icon: model.selectedSettingsTab.systemImage)
+                }
+
+                RuleDivider(strong: true)
+
+                SettingsRootView()
+                    .environmentObject(model)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+    }
+
+    private var activeClipsContextStrip: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ContextChip(title: "Platform", value: model.selectedPlatform.label, tone: backstageTone, isActive: model.selectedPlatform != .all, icon: "square.stack.3d.up")
+                ContextChip(title: "Scope", value: model.selectedScope.title, tone: backstageTone, isActive: model.selectedScope != .all, icon: "line.3.horizontal.decrease.circle")
+                ContextChip(title: "Space", value: selectedSpaceLabel, tone: backstageTone, isActive: model.selectedSpaceID != nil, icon: "square.split.2x2")
+                Button {
+                    isTimeboxPopoverPresented.toggle()
+                } label: {
+                    ContextChip(title: "Timebox", value: model.timeboxDraft.filter.summary, tone: backstageTone, isActive: model.timeboxDraft.filter != .all, icon: "clock")
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $isTimeboxPopoverPresented, arrowEdge: .bottom) {
+                    clipTimeboxPopover
+                }
+                Button {
+                    model.resetPrimaryFilters(clearSearch: true)
+                } label: {
+                    Label("Reset Context", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .ghost))
+            }
+        }
+        .scrollIndicators(.never)
+    }
+
+    private var clipsSidebarSections: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SidebarDisclosureSection(
+                title: "Platform",
+                subtitle: "平台条件彻底退回左侧，不再占据顶部视觉主权。",
+                tone: backstageTone,
+                isExpanded: isSidebarSectionExpanded("platform"),
+                onToggle: { toggleSidebarSection("platform") }
+            ) {
+                VStack(spacing: 8) {
                     ForEach(filters.indices, id: \.self) { index in
                         let filter = filters[index]
-                        Button {
+                        sidebarSelectionButton(
+                            title: filter.label,
+                            subtitle: filter.bucket == nil ? "取消平台限制" : "只查看 \(filter.label)",
+                            isSelected: model.selectedPlatform == filter
+                        ) {
                             model.focusPlatform(filter)
-                        } label: {
-                            HStack {
-                                Text(filter.label)
-                                    .cosmoTextFont(filter.label, size: 14, weight: .medium)
-                                if filter == model.selectedPlatform {
-                                    Spacer(minLength: 10)
-                                    Image(systemName: "checkmark")
-                                }
-                            }
                         }
                     }
                 }
+            }
 
-                TopBarMenu(title: "View Scope", value: model.selectedScope.title) {
+            SidebarDisclosureSection(
+                title: "Scope",
+                subtitle: "收起次级条件，让当前浏览范围保持明确。",
+                tone: backstageTone,
+                isExpanded: isSidebarSectionExpanded("scope"),
+                onToggle: { toggleSidebarSection("scope") }
+            ) {
+                VStack(spacing: 8) {
                     ForEach(ClipScope.allCases) { scope in
-                        Button {
+                        sidebarSelectionButton(
+                            title: scope.title,
+                            subtitle: scope == .all ? "查看全部条目" : "只看 \(scope.title)",
+                            isSelected: model.selectedScope == scope
+                        ) {
                             model.selectedScope = scope
-                        } label: {
-                            HStack {
-                                Text(scope.title)
-                                    .cosmoTextFont(scope.title, size: 14, weight: .medium)
-                                if model.selectedScope == scope {
-                                    Spacer(minLength: 10)
-                                    Image(systemName: "checkmark")
-                                }
+                        }
+                    }
+                }
+            }
+
+            SidebarDisclosureSection(
+                title: "Space",
+                subtitle: "空间色彩只强化上下文，不再侵入正文内容。",
+                tone: backstageTone,
+                isExpanded: isSidebarSectionExpanded("space"),
+                onToggle: { toggleSidebarSection("space") }
+            ) {
+                VStack(spacing: 8) {
+                    sidebarSelectionButton(
+                        title: "All Spaces",
+                        subtitle: "解除空间过滤",
+                        isSelected: model.selectedSpaceID == nil
+                    ) {
+                        model.focusSpace(nil)
+                    }
+
+                    ForEach(model.spaces) { space in
+                        sidebarSelectionButton(
+                            title: space.name,
+                            subtitle: space.tags.prefix(3).joined(separator: " · "),
+                            isSelected: model.selectedSpaceID == space.id
+                        ) {
+                            model.focusSpace(space.id)
+                            if let firstTag = space.tags.first {
+                                model.captureTagDraft = firstTag
                             }
                         }
                     }
                 }
+            }
 
-                TopBarMenu(title: "Spaces", value: selectedSpaceLabel) {
+        }
+    }
+
+    private var clipTimeboxPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Timebox")
+                .cosmoDisplayFont("Timebox", size: 18, weight: .semibold)
+                .foregroundStyle(CosmoTheme.textPrimary)
+
+            Text("完整时间范围编辑已经迁移到这里。")
+                .cosmoTextFont("完整时间范围编辑已经迁移到这里。", size: 12)
+                .foregroundStyle(CosmoTheme.textSecondary)
+
+            HStack(spacing: 8) {
+                timeboxQuickButton("All") {
+                    model.timeboxDraft = TimeboxDraft(mode: .all)
+                }
+                timeboxQuickButton("Today") {
+                    model.timeboxDraft = .today()
+                }
+            }
+
+            HStack(spacing: 8) {
+                timeboxQuickButton("24h") {
+                    model.timeboxDraft = TimeboxDraft(mode: .trailingHours, trailingHours: 24)
+                }
+                timeboxQuickButton("72h") {
+                    model.timeboxDraft = TimeboxDraft(mode: .trailingHours, trailingHours: 72)
+                }
+            }
+
+            TimeboxComposer(draft: $model.timeboxDraft, tone: backstageTone)
+        }
+        .padding(16)
+        .frame(width: 320, alignment: .topLeading)
+        .background(
+            Rectangle()
+                .fill(CosmoTheme.panelGradient(tier: .workspace, tone: backstageTone))
+                .overlay(
+                    Rectangle()
+                        .strokeBorder(CosmoTheme.divider, lineWidth: 1)
+                )
+        )
+    }
+
+    private var promptSidebarSections: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SidebarDisclosureSection(
+                title: "Library Actions",
+                subtitle: "新建、复制与快速回到 prompt hive。",
+                tone: backstageTone,
+                isExpanded: isSidebarSectionExpanded("actions"),
+                onToggle: { toggleSidebarSection("actions") }
+            ) {
+                VStack(spacing: 10) {
                     Button {
-                        model.focusSpace(nil)
+                        model.createPromptLibraryItem()
                     } label: {
-                        HStack {
-                            Text("All Spaces")
-                            if model.selectedSpaceID == nil {
-                                Spacer(minLength: 10)
-                                Image(systemName: "checkmark")
-                            }
+                        Label("Create Prompt", systemImage: "plus")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .primary))
+
+                    Button {
+                        model.copySelectedPromptContent()
+                    } label: {
+                        Label("Copy Selected Prompt", systemImage: "doc.on.doc")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .secondary))
+                    .disabled(model.selectedPrompt == nil)
+
+                    Button {
+                        model.presentRecallOverlay(initialMode: .promptLibrary)
+                    } label: {
+                        Label("Open Prompt Hive", systemImage: "hexagon")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .ghost))
+                }
+            }
+
+            SidebarDisclosureSection(
+                title: "Library",
+                subtitle: "系统条目与自定义条目统一集中管理。",
+                tone: backstageTone,
+                isExpanded: isSidebarSectionExpanded("library"),
+                onToggle: { toggleSidebarSection("library") }
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    sidebarMetricRow(title: "Prompts", value: "\(model.promptItems.count)")
+                    sidebarMetricRow(title: "System", value: "\(model.promptItems.filter(\.isSystem).count)")
+                    sidebarMetricRow(title: "Custom", value: "\(model.promptItems.filter { !$0.isSystem }.count)")
+                }
+            }
+
+            SidebarDisclosureSection(
+                title: "Source / Meta",
+                subtitle: "只读来源在左侧，完整编辑动作交给主工作区。",
+                tone: backstageTone,
+                isExpanded: isSidebarSectionExpanded("source"),
+                onToggle: { toggleSidebarSection("source") }
+            ) {
+                if let selectedPrompt = model.selectedPrompt {
+                    VStack(alignment: .leading, spacing: 10) {
+                        sidebarMetricRow(title: "Type", value: selectedPrompt.isSystem ? "System Prompt" : "Custom Prompt")
+                        sidebarMetricRow(title: "Source", value: selectedPrompt.sourceLabel.isEmpty ? "Custom" : selectedPrompt.sourceLabel)
+                        if !selectedPrompt.sourceURL.isEmpty {
+                            Text(selectedPrompt.sourceURL)
+                                .cosmoTextFont(selectedPrompt.sourceURL, size: 12)
+                                .foregroundStyle(CosmoTheme.textSecondary)
+                                .textSelection(.enabled)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    Rectangle()
+                                        .fill(CosmoTheme.panelGradient(tier: .row, tone: backstageTone))
+                                        .overlay(
+                                            Rectangle()
+                                                .stroke(CosmoTheme.divider, lineWidth: 1)
+                                        )
+                                )
                         }
                     }
+                } else {
+                    Text("Select a prompt to inspect its source.")
+                        .cosmoTextFont("Select a prompt to inspect its source.", size: 13)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                }
+            }
+        }
+    }
 
-                    if model.spaces.isEmpty {
-                        Text("No spaces yet")
-                    } else {
-                        Divider()
-                        ForEach(model.spaces) { space in
-                            Button {
-                                model.focusSpace(space.id)
-                                if let firstTag = space.tags.first {
-                                    model.captureTagDraft = firstTag
+    private var todoSidebarSections: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SidebarDisclosureSection(
+                title: "Quick",
+                subtitle: "待办成为正式模块后，侧栏只保留概览与快速跳转。",
+                tone: backstageTone,
+                isExpanded: isSidebarSectionExpanded("quick"),
+                onToggle: { toggleSidebarSection("quick") }
+            ) {
+                VStack(spacing: 10) {
+                    sidebarMetricRow(title: "Pending", value: "\(model.todoItems.count)")
+                    sidebarMetricRow(title: "Focused", value: model.todoItems.first(where: { $0.id == model.todoFocusedItemID })?.title ?? "None")
+
+                    Button {
+                        model.presentRecallOverlay(initialMode: .todo)
+                    } label: {
+                        Label("Open Todo Cloud", systemImage: "sparkles")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .secondary))
+                }
+            }
+
+            SidebarDisclosureSection(
+                title: "Queue",
+                subtitle: "选择一个待办，主工作区里做重命名或完成。",
+                tone: backstageTone,
+                isExpanded: isSidebarSectionExpanded("queue"),
+                onToggle: { toggleSidebarSection("queue") }
+            ) {
+                if model.todoItems.isEmpty {
+                    Text("No pending todos.")
+                        .cosmoTextFont("No pending todos.", size: 13)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(Array(model.todoItems.prefix(8))) { item in
+                            sidebarSelectionButton(
+                                title: item.title,
+                                subtitle: item.updatedAt.formatted(date: .abbreviated, time: .shortened),
+                                isSelected: model.todoFocusedItemID == item.id
+                            ) {
+                                if model.todoEditingItemID != nil, model.todoEditingItemID != item.id {
+                                    model.finishTodoEditing(commit: true)
                                 }
-                            } label: {
-                                HStack {
-                                    Text(space.name)
-                                        .cosmoTextFont(space.name, size: 14, weight: .medium)
-                                    if model.selectedSpaceID == space.id {
-                                        Spacer(minLength: 10)
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
+                                model.selectTodoItem(item.id)
                             }
                         }
                     }
                 }
             }
         }
-        .frame(minHeight: 94)
+    }
+
+    private var settingsSidebarSections: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SidebarDisclosureSection(
+                title: "Tabs",
+                subtitle: "所有设置入口现在都从后台侧边栏切换。",
+                tone: backstageTone,
+                isExpanded: isSidebarSectionExpanded("tabs"),
+                onToggle: { toggleSidebarSection("tabs") }
+            ) {
+                VStack(spacing: 8) {
+                    ForEach(SettingsTab.allCases) { tab in
+                        sidebarSelectionButton(
+                            title: tab.title,
+                            subtitle: tab.systemImage,
+                            isSelected: model.selectedSettingsTab == tab
+                        ) {
+                            model.selectedSettingsTab = tab
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var sidebarSubtitle: String {
+        switch model.backstageModule {
+        case .clips:
+            return "Filters and context"
+        case .promptLibrary:
+            return "Library meta and entry points"
+        case .todo:
+            return "Queue summary and selection"
+        case .settings:
+            return "Backstage settings navigation"
+        }
+    }
+
+    private func isSidebarSectionExpanded(_ sectionID: String) -> Bool {
+        model.isBackstageSectionExpanded(module: model.backstageModule, sectionID: sectionID)
+    }
+
+    private func toggleSidebarSection(_ sectionID: String) {
+        withAnimation(CosmoMotion.quick) {
+            model.toggleBackstageSection(module: model.backstageModule, sectionID: sectionID)
+        }
+    }
+
+    private func sidebarMetricRow(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .cosmoUIFont(title.uppercased(), size: 10, weight: .bold)
+                .foregroundStyle(CosmoTheme.textTertiary)
+            Text(value)
+                .cosmoTextFont(value, size: 13, weight: .medium)
+                .foregroundStyle(CosmoTheme.textPrimary)
+                .lineLimit(3)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            Rectangle()
+                .fill(CosmoTheme.panelGradient(tier: .row, tone: backstageTone))
+                .overlay(
+                    Rectangle()
+                        .stroke(CosmoTheme.divider, lineWidth: 1)
+                )
+        )
+    }
+
+    private func sidebarSelectionButton(
+        title: String,
+        subtitle: String? = nil,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            WorkbenchRow(tone: backstageTone, isSelected: isSelected, padding: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .cosmoTextFont(title, size: 13, weight: .semibold)
+                        .foregroundStyle(CosmoTheme.textPrimary)
+                        .lineLimit(2)
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .cosmoTextFont(subtitle, size: 11)
+                            .foregroundStyle(CosmoTheme.textSecondary)
+                            .lineLimit(2)
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func timeboxQuickButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .frame(maxWidth: .infinity)
+            .buttonStyle(ConsoleButtonStyle(tone: backstageTone, variant: .secondary))
+    }
+
+    private var topBar: some View {
+        ContentPanel(tone: currentSpaceTone, padding: 24) {
+            if model.backstageModule == .clips {
+                clipCommandDeck
+            } else {
+                promptCommandDeck
+            }
+        }
+        .frame(minHeight: model.backstageModule == .clips ? 260 : 180)
+    }
+
+    private var backstageModuleButtons: some View {
+        HStack(spacing: 10) {
+            ForEach(BackstageModule.allCases) { module in
+                Button {
+                    model.openBackstageModule(module)
+                } label: {
+                    ContextChip(
+                        title: "Module",
+                        value: module.title,
+                        tone: currentSpaceTone,
+                        isActive: model.backstageModule == module,
+                        icon: module == .clips ? "square.stack.3d.up" : "text.badge.star"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var clipCommandDeck: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 24) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Backstage")
+                        .cosmoDisplayFont("Backstage", size: 38, weight: .bold)
+                        .foregroundStyle(CosmoTheme.textPrimary)
+                    Text("把 Recall 之外的显式整理动作，收束成更锐利的指挥台。搜索、召回、采集是第一视觉，其余条件退为上下文。")
+                        .cosmoTextFont("把 Recall 之外的显式整理动作，收束成更锐利的指挥台。搜索、召回、采集是第一视觉，其余条件退为上下文。", size: 14)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    backstageModuleButtons
+                }
+
+                Spacer(minLength: 24)
+
+                if let currentSpace {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        Text("Current Space".uppercased())
+                            .cosmoUIFont("Current Space", size: 10, weight: .semibold, design: .rounded)
+                            .foregroundStyle(CosmoTheme.textTertiary)
+                        Text(currentSpace.name)
+                            .cosmoDisplayFont(currentSpace.name, size: 22, weight: .semibold)
+                            .foregroundStyle(currentSpaceTone.accent)
+                        Text(currentSpace.tags.prefix(3).joined(separator: " · "))
+                            .cosmoTextFont(currentSpace.tags.prefix(3).joined(separator: " · "), size: 12)
+                            .foregroundStyle(CosmoTheme.textSecondary)
+                    }
+                    .frame(maxWidth: 220, alignment: .trailing)
+                }
+            }
+
+            HStack(alignment: .top, spacing: 18) {
+                ChromePanel(tone: currentSpaceTone, padding: 20) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Command Spine")
+                            .cosmoUIFont("Command Spine", size: 11, weight: .bold, design: .rounded)
+                            .foregroundStyle(CosmoTheme.textTertiary)
+
+                        HStack(spacing: 14) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(currentSpaceTone.accent)
+
+                            TextField("搜索整个库，用自然语言描述你还记得的碎片", text: $model.searchDraft)
+                                .textFieldStyle(.plain)
+                                .font(CosmoTypography.font(
+                                    for: model.searchDraft.isEmpty ? "搜索整个库，用自然语言描述你还记得的碎片" : model.searchDraft,
+                                    role: .display,
+                                    size: 20,
+                                    weight: .medium
+                                ))
+                                .foregroundStyle(Color.white.opacity(0.96))
+                                .onSubmit {
+                                    Task {
+                                        await model.submitAISearch(forceImmediate: true)
+                                    }
+                                }
+
+                            if model.aiSearchStatus.isBusy {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .tint(Color.white.opacity(0.7))
+                            } else if !model.searchDraft.isEmpty {
+                                Button {
+                                    model.clearSearch()
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundStyle(Color.white.opacity(0.82))
+                                        .frame(width: 26, height: 26)
+                                        .background(Circle().fill(Color.white.opacity(0.08)))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        Text(model.isAISearchContextActive ? "AI 检索正在接管上下文；Platform / Scope / Space / Timebox 暂退为过滤背景。" : "需要更沉浸的记忆召回时，直接打开 Recall Overlay；这里专注于显式整理与精修。")
+                            .cosmoTextFont(model.isAISearchContextActive ? "AI 检索正在接管上下文；Platform / Scope / Space / Timebox 暂退为过滤背景。" : "需要更沉浸的记忆召回时，直接打开 Recall Overlay；这里专注于显式整理与精修。", size: 12)
+                            .foregroundStyle(Color.white.opacity(model.isAISearchContextActive ? 0.82 : 0.68))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(spacing: 12) {
+                    PrimaryCommandButton(
+                        title: "Open Recall",
+                        subtitle: "进入全屏召回层，保持未来感与沉浸感。",
+                        systemImage: "sparkles",
+                        tone: currentSpaceTone,
+                        prominent: true
+                    ) {
+                        model.presentRecallOverlay()
+                    }
+
+                    PrimaryCommandButton(
+                        title: "Capture Page",
+                        subtitle: "把当前网页送进当前工作台。",
+                        systemImage: "safari",
+                        tone: currentSpaceTone
+                    ) {
+                        model.captureCurrentPage()
+                    }
+
+                    PrimaryCommandButton(
+                        title: "Capture Clipboard",
+                        subtitle: "收下剪贴板文字或链接，继续整理。",
+                        systemImage: "doc.on.clipboard",
+                        tone: currentSpaceTone
+                    ) {
+                        model.captureClipboard()
+                    }
+                }
+                .frame(width: 320)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    Menu {
+                        ForEach(SettingsTab.allCases) { tab in
+                            Button(tab.title) {
+                                model.openSettingsTab(tab)
+                            }
+                        }
+                    } label: {
+                        ContextChip(title: "Settings", value: model.selectedSettingsTab.title, tone: currentSpaceTone, icon: "slider.horizontal.3")
+                    }
+                    .menuStyle(.borderlessButton)
+
+                    Menu {
+                        ForEach(filters.indices, id: \.self) { index in
+                            let filter = filters[index]
+                            Button(filter.label) {
+                                model.focusPlatform(filter)
+                            }
+                        }
+                    } label: {
+                        ContextChip(title: "Platform", value: model.selectedPlatform.label, tone: currentSpaceTone, isActive: model.selectedPlatform != .all, icon: "square.stack.3d.up")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .disabled(model.isAISearchContextActive)
+
+                    Menu {
+                        ForEach(ClipScope.allCases) { scope in
+                            Button(scope.title) {
+                                model.selectedScope = scope
+                            }
+                        }
+                    } label: {
+                        ContextChip(title: "Scope", value: model.selectedScope.title, tone: currentSpaceTone, isActive: model.selectedScope != .all, icon: "line.3.horizontal.decrease.circle")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .disabled(model.isAISearchContextActive)
+
+                    Menu {
+                        Button("All Spaces") {
+                            model.focusSpace(nil)
+                        }
+                        if !model.spaces.isEmpty {
+                            Divider()
+                            ForEach(model.spaces) { space in
+                                Button(space.name) {
+                                    model.focusSpace(space.id)
+                                    if let firstTag = space.tags.first {
+                                        model.captureTagDraft = firstTag
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        ContextChip(title: "Space", value: selectedSpaceLabel, tone: currentSpaceTone, isActive: model.selectedSpaceID != nil, icon: "square.split.2x2")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .disabled(model.isAISearchContextActive)
+
+                    Menu {
+                        Button("All time") {
+                            model.timeboxDraft = TimeboxDraft(mode: .all)
+                        }
+                        Button("Today") {
+                            model.timeboxDraft = .today()
+                        }
+                        Button("Past 24h") {
+                            model.timeboxDraft = TimeboxDraft(mode: .trailingHours, trailingHours: 24)
+                        }
+                        Button("Past 72h") {
+                            model.timeboxDraft = TimeboxDraft(mode: .trailingHours, trailingHours: 72)
+                        }
+                    } label: {
+                        ContextChip(title: "Timebox", value: model.timeboxDraft.filter.summary, tone: currentSpaceTone, isActive: model.timeboxDraft.filter != .all, icon: "clock")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .disabled(model.isAISearchContextActive)
+
+                    Button {
+                        model.resetPrimaryFilters()
+                    } label: {
+                        ContextChip(title: "Reset", value: "Today", tone: currentSpaceTone, icon: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var promptCommandDeck: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 24) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Prompt Library")
+                        .cosmoDisplayFont("Prompt Library", size: 34, weight: .bold)
+                        .foregroundStyle(CosmoTheme.textPrimary)
+                    Text("快用层负责调用，这里负责完整编辑、来源追溯与系统化沉淀。")
+                        .cosmoTextFont("快用层负责调用，这里负责完整编辑、来源追溯与系统化沉淀。", size: 14)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                    backstageModuleButtons
+                }
+
+                Spacer(minLength: 24)
+
+                VStack(spacing: 12) {
+                    PrimaryCommandButton(
+                        title: "New Prompt",
+                        subtitle: "创建新的系统提示词条目。",
+                        systemImage: "plus",
+                        tone: currentSpaceTone,
+                        prominent: true
+                    ) {
+                        model.createPromptLibraryItem()
+                    }
+
+                    PrimaryCommandButton(
+                        title: "Open Prompt Hive",
+                        subtitle: "进入蜂巢视图，快速调用现有提示词。",
+                        systemImage: "hexagon",
+                        tone: currentSpaceTone
+                    ) {
+                        model.presentRecallOverlay(initialMode: .promptLibrary)
+                    }
+                }
+                .frame(width: 320)
+            }
+
+            if let selectedPrompt = model.selectedPrompt, !selectedPrompt.sourceLabel.isEmpty {
+                ContextChip(
+                    title: selectedPrompt.isSystem ? "System Source" : "Source",
+                    value: selectedPrompt.sourceLabel,
+                    tone: currentSpaceTone,
+                    isActive: true,
+                    icon: selectedPrompt.isSystem ? "sparkles" : "square.and.pencil"
+                )
+            }
+        }
     }
 
     private var selectedSpaceLabel: String {
-        guard
-            let selectedSpaceID = model.selectedSpaceID,
-            let space = model.spaces.first(where: { $0.id == selectedSpaceID })
-        else {
-            return "All Spaces"
-        }
-
-        return space.name
+        currentSpace?.name ?? "All Spaces"
     }
 
-    private var sidebarPaneView: some View {
-        CardSurface {
+    private var clipSidebarView: some View {
+        ChromePanel(tone: currentSpaceTone, padding: 18) {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Utility")
-                        .font(.system(size: 24, weight: .semibold, design: .serif))
-                        .foregroundStyle(CosmoPalette.ink)
-                    Text("把捕获动作、时间范围和辅助状态收在侧边，搜索与筛选主控件全部回到顶部。")
-                        .cosmoTextFont("把捕获动作、时间范围和辅助状态收在侧边，搜索与筛选主控件全部回到顶部。", size: 13)
-                        .foregroundStyle(CosmoPalette.textSecondary)
+                    Text("Operations")
+                        .cosmoDisplayFont("Operations", size: 25, weight: .semibold)
+                        .foregroundStyle(CosmoTheme.bone)
+                    Text("侧栏退成暗箱，只保留高频动作和当前工作范围。主视觉权重交给内容区与右侧工作室。")
+                        .cosmoTextFont("侧栏退成暗箱，只保留高频动作和当前工作范围。主视觉权重交给内容区与右侧工作室。", size: 12)
+                        .foregroundStyle(Color.white.opacity(0.72))
                 }
 
-                SidebarSection(title: "Visible", subtitle: "这些统计继续固定显示在侧边，方便快速感知当前范围。") {
-                    VStack(spacing: 10) {
-                        StatPill(title: "Visible", value: "\(model.clips.count)")
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Visible".uppercased())
+                        .cosmoUIFont("Visible", size: 10, weight: .bold, design: .rounded)
+                        .foregroundStyle(Color.white.opacity(0.48))
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                        StatPill(title: "Visible", value: "\(model.displayedClips.count)")
                         StatPill(title: "Inbox", value: "\(model.stats.inboxCount)")
                         StatPill(title: "Library", value: "\(model.stats.libraryCount)")
                         StatPill(title: "Failed", value: "\(model.stats.failedCount)")
@@ -874,13 +2045,30 @@ public struct RootView: View {
                     }
                 }
 
-                Divider()
-                    .overlay(CosmoPalette.line)
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(height: 1)
 
-                SidebarSection(title: "Capture Tag", subtitle: "剪藏前先选择 tag，系统会自动分配到匹配该 tag 的 space。") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Capture Tag".uppercased())
+                        .cosmoUIFont("Capture Tag", size: 10, weight: .bold, design: .rounded)
+                        .foregroundStyle(Color.white.opacity(0.48))
+                    Text("剪藏前先定一个 tag，系统会自动回填到匹配 space。")
+                        .cosmoTextFont("剪藏前先定一个 tag，系统会自动回填到匹配 space。", size: 12)
+                        .foregroundStyle(Color.white.opacity(0.68))
                     TextField("例如 design / research / inspiration", text: $model.captureTagDraft)
                         .cosmoInputFont()
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: CosmoRadius.md, style: .continuous)
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: CosmoRadius.md, style: .continuous)
+                                        .strokeBorder(currentSpaceTone.accent.opacity(0.18), lineWidth: 1)
+                                )
+                        )
                     if !model.spaces.isEmpty {
                         FlowTagList(tags: suggestedTags, selectedTag: $model.captureTagDraft)
                     }
@@ -893,13 +2081,20 @@ public struct RootView: View {
                             .padding(.vertical, 11)
                             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                    .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                    .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.08), foreground: .white, border: Color.white.opacity(0.10)))
                 }
 
-                Divider()
-                    .overlay(CosmoPalette.line)
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(height: 1)
 
-                SidebarSection(title: "Quick Actions", subtitle: "保留高频操作入口，方便在同一侧完成捕获与整理。") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Quick Actions".uppercased())
+                        .cosmoUIFont("Quick Actions", size: 10, weight: .bold, design: .rounded)
+                        .foregroundStyle(Color.white.opacity(0.48))
+                    Text("只保留当前会真正用到的动作，其余出口让位给内容。")
+                        .cosmoTextFont("只保留当前会真正用到的动作，其余出口让位给内容。", size: 12)
+                        .foregroundStyle(Color.white.opacity(0.68))
                     VStack(spacing: 10) {
                         Button {
                             model.captureCurrentPage()
@@ -910,7 +2105,7 @@ public struct RootView: View {
                                 .padding(.vertical, 12)
                                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
+                        .buttonStyle(SurfaceButtonStyle(fill: currentSpaceTone.accent, foreground: CosmoTheme.carbon, border: currentSpaceTone.ribbon.opacity(0.18)))
 
                         Button {
                             model.captureClipboard()
@@ -921,7 +2116,7 @@ public struct RootView: View {
                                 .padding(.vertical, 12)
                                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                        .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.08), foreground: .white, border: Color.white.opacity(0.10)))
 
                         Button {
                             model.openSelectedClipURL()
@@ -932,113 +2127,368 @@ public struct RootView: View {
                                 .padding(.vertical, 12)
                                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                        .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.08), foreground: .white, border: Color.white.opacity(0.10)))
                         .disabled(model.selectedClip?.url.hasPrefix("clipboard://") ?? true)
 
                         Button {
-                            model.copySelectedClipURL()
+                            if model.selectedClip?.isPlainTextClipboardCapture == true {
+                                model.copySelectedClipContent()
+                            } else {
+                                model.copySelectedClipURL()
+                            }
                         } label: {
-                            Label("Copy Selected URL", systemImage: "link")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 14)
+                            Label(
+                                model.selectedClip?.isPlainTextClipboardCapture == true ? "Copy Selected Text" : "Copy Selected URL",
+                                systemImage: model.selectedClip?.isPlainTextClipboardCapture == true ? "doc.on.doc" : "link"
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
                                 .padding(.vertical, 12)
                                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                        .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.08), foreground: .white, border: Color.white.opacity(0.10)))
                         .disabled(model.selectedClip == nil)
 
                         HStack(spacing: 10) {
                             Button("Inbox") {
                                 model.updateSelectedClipStatus(.inbox)
                             }
-                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                            .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.08), foreground: .white, border: Color.white.opacity(0.10)))
                             .disabled(model.selectedClip == nil)
 
                             Button("Library") {
                                 model.updateSelectedClipStatus(.library)
                             }
-                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                            .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.08), foreground: .white, border: Color.white.opacity(0.10)))
                             .disabled(model.selectedClip == nil)
 
                             Button("Trash") {
                                 model.updateSelectedClipStatus(.trashed)
                             }
-                            .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                            .buttonStyle(SurfaceButtonStyle(fill: Color.white.opacity(0.08), foreground: .white, border: Color.white.opacity(0.10)))
                             .disabled(model.selectedClip == nil)
                         }
+                    }
+                }
+
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(height: 1)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Timebox".uppercased())
+                        .cosmoUIFont("Timebox", size: 10, weight: .bold, design: .rounded)
+                        .foregroundStyle(Color.white.opacity(0.48))
+                    Text("精细时间范围仍然留在侧栏深处，顶部只保留快速语境。")
+                        .cosmoTextFont("精细时间范围仍然留在侧栏深处，顶部只保留快速语境。", size: 12)
+                        .foregroundStyle(Color.white.opacity(0.68))
+                    TimeboxComposer(draft: $model.timeboxDraft)
+                        .disabled(model.isAISearchContextActive)
+                        .opacity(model.isAISearchContextActive ? 0.5 : 1)
+                }
+            }
+        }
+    }
+
+    private var promptSidebarView: some View {
+        CardSurface {
+            VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Prompt Workbench")
+                        .font(.system(size: 24, weight: .semibold, design: .serif))
+                        .foregroundStyle(CosmoPalette.ink)
+                    Text("蜂巢蒙版只负责快用，这里承接完整编辑、来源追溯与后续扩充。")
+                        .cosmoTextFont("蜂巢蒙版只负责快用，这里承接完整编辑、来源追溯与后续扩充。", size: 13)
+                        .foregroundStyle(CosmoPalette.textSecondary)
+                }
+
+                SidebarSection(title: "Library", subtitle: "系统提示词与自定义提示词在这里统一管理。") {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                        StatPill(title: "Prompts", value: "\(model.promptItems.count)")
+                        StatPill(title: "System", value: "\(model.promptItems.filter { $0.isSystem }.count)")
+                        StatPill(title: "Custom", value: "\(model.promptItems.filter { !$0.isSystem }.count)")
+                        StatPill(title: "Selected", value: model.selectedPrompt == nil ? "0" : "1")
                     }
                 }
 
                 Divider()
                     .overlay(CosmoPalette.line)
 
-                SidebarSection(title: "Timebox", subtitle: "整个 app 只保留一个外层滚动条，时间范围也放回侧边栏。") {
-                    TimeboxComposer(draft: $model.timeboxDraft)
-                }
-            }
-        }
-        .frame(minWidth: 248, idealWidth: 260, maxWidth: 278, alignment: .topLeading)
-    }
+                SidebarSection(title: "Actions", subtitle: "新建、复制和快速进入 Overlay。") {
+                    VStack(spacing: 10) {
+                        Button {
+                            model.createPromptLibraryItem()
+                        } label: {
+                            Label("Create Prompt", systemImage: "plus")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
 
-    private var contentCanvas: some View {
-        CardSurface {
-            VStack(alignment: .leading, spacing: 22) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(canvasHeadline)
-                        .font(.system(size: 24, weight: .semibold, design: .serif))
-                        .foregroundStyle(CosmoPalette.ink)
-                    Text(canvasSubheadline)
-                        .cosmoTextFont(canvasSubheadline, size: 13)
-                        .foregroundStyle(CosmoPalette.textSecondary)
-                    if let selectedSpaceID = model.selectedSpaceID, let space = model.spaces.first(where: { $0.id == selectedSpaceID }) {
-                        Text("Current space filter: \(space.name)")
-                            .cosmoTextFont("Current space filter: \(space.name)", size: 12, weight: .medium)
-                            .foregroundStyle(CosmoPalette.moss)
+                        Button {
+                            model.copySelectedPromptContent()
+                        } label: {
+                            Label("Copy Selected Prompt", systemImage: "doc.on.doc")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
+                        .disabled(model.selectedPrompt == nil)
+
+                        Button {
+                            model.presentRecallOverlay(initialMode: .promptLibrary)
+                        } label: {
+                            Label("Open Prompt Hive", systemImage: "hexagon")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
                     }
                 }
 
-                if model.clips.isEmpty {
-                    ContentUnavailableView("No clips found", systemImage: "tray", description: Text("调整筛选条件，或先通过剪贴板 / 当前网页捕获内容。").cosmoTextFont("调整筛选条件，或先通过剪贴板 / 当前网页捕获内容。", size: 14))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 48)
-                } else {
-                    LazyVStack(spacing: 12) {
-                        ForEach(model.clips) { clip in
-                            Button {
-                                model.presentClipDetail(clip)
-                            } label: {
-                                ClipStripRow(clip: clip, selected: model.selectedClipID == clip.id)
-                            }
-                            .buttonStyle(ClipCardButtonStyle(selected: model.selectedClipID == clip.id))
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button {
-                                    model.deleteOrTrash(clip)
-                                } label: {
-                                    Label(clip.status == .trashed ? "Delete Forever" : "Delete", systemImage: "trash")
-                                }
-                                .tint(.red)
+                Divider()
+                    .overlay(CosmoPalette.line)
 
-                                Button {
-                                    model.togglePin(for: clip)
-                                } label: {
-                                    Label(clip.isPinned ? "Unpin" : "Pin", systemImage: clip.isPinned ? "pin.slash" : "pin")
-                                }
-                                .tint(.orange)
-                            }
-                            .contextMenu {
-                                Button(clip.isPinned ? "取消置顶" : "置顶") {
-                                    model.togglePin(for: clip)
-                                }
-                                Button(clip.status == .trashed ? "彻底删除" : "删除", role: .destructive) {
-                                    model.deleteOrTrash(clip)
-                                }
-                            }
+                SidebarSection(title: "Source", subtitle: "当前选中条目的来源信息保留为只读。") {
+                    if let selectedPrompt = model.selectedPrompt {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(selectedPrompt.sourceLabel.isEmpty ? "Custom" : selectedPrompt.sourceLabel)
+                                .cosmoTextFont(selectedPrompt.sourceLabel.isEmpty ? "Custom" : selectedPrompt.sourceLabel, size: 13, weight: .medium)
+                                .foregroundStyle(CosmoPalette.ink)
+                            Text(selectedPrompt.sourceURL.isEmpty ? "No source URL" : selectedPrompt.sourceURL)
+                                .cosmoTextFont(selectedPrompt.sourceURL.isEmpty ? "No source URL" : selectedPrompt.sourceURL, size: 12)
+                                .foregroundStyle(CosmoPalette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(CosmoPalette.surfaceSoft)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .strokeBorder(CosmoPalette.line, lineWidth: 1)
+                                )
+                        )
+                    } else {
+                        Text("Select a prompt to inspect its source.")
+                            .cosmoTextFont("Select a prompt to inspect its source.", size: 13)
+                            .foregroundStyle(CosmoPalette.textSecondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var clipCanvas: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(canvasHeadline)
+                    .cosmoDisplayFont(canvasHeadline, size: 29, weight: .semibold)
+                    .foregroundStyle(CosmoTheme.textPrimary)
+                Text(canvasSubheadline)
+                    .cosmoTextFont(canvasSubheadline, size: 13)
+                    .foregroundStyle(CosmoTheme.textSecondary)
+                if model.isAISearchActive {
+                    Text("Query: \(model.activeSearchQuery)")
+                        .cosmoUIFont("Query: \(model.activeSearchQuery)", size: 12, weight: .bold)
+                        .foregroundStyle(currentSpaceTone.accent)
+                }
+                if let currentSpace {
+                    Text("Current space filter: \(currentSpace.name)")
+                        .cosmoUIFont("Current space filter: \(currentSpace.name)", size: 12, weight: .bold)
+                        .foregroundStyle(currentSpaceTone.accent)
+                }
+            }
+
+            if model.displayedClips.isEmpty {
+                ContentUnavailableView(
+                    model.isAISearchActive ? "No AI matches found" : "No clips found",
+                    systemImage: "tray",
+                    description: Text(model.isAISearchActive ? "可以尝试换一种自然语言描述，或者返回 Home 回到默认主页。" : "调整筛选条件，或先通过剪贴板 / 当前网页捕获内容。").cosmoTextFont(model.isAISearchActive ? "可以尝试换一种自然语言描述，或者返回 Home 回到默认主页。" : "调整筛选条件，或先通过剪贴板 / 当前网页捕获内容。", size: 14)
+                )
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 48)
+            } else {
+                LazyVStack(spacing: 12) {
+                    if model.isAISearchActive {
+                        ForEach(model.aiSearchResults) { result in
+                            clipRowButton(clip: result.clip, searchResult: result)
+                        }
+                    } else {
+                        ForEach(model.clips) { clip in
+                            clipRowButton(clip: clip, searchResult: nil)
                         }
                     }
                 }
             }
         }
+    }
+
+    private var promptLibraryCanvas: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(canvasHeadline)
+                    .font(.system(size: 24, weight: .semibold, design: .serif))
+                    .foregroundStyle(CosmoPalette.ink)
+                Text(canvasSubheadline)
+                    .cosmoTextFont(canvasSubheadline, size: 13)
+                    .foregroundStyle(CosmoPalette.textSecondary)
+            }
+
+            PromptLibraryWorkbenchView()
+                .environmentObject(model)
+        }
+    }
+
+    private var sidebarPaneView: some View {
+        Group {
+            if model.backstageModule == .promptLibrary {
+                promptSidebarView
+            } else {
+                clipSidebarView
+            }
+        }
+        .frame(
+            minWidth: model.backstageModule == .clips ? 230 : 248,
+            idealWidth: model.backstageModule == .clips ? 236 : 260,
+            maxWidth: model.backstageModule == .clips ? 240 : 278,
+            alignment: .topLeading
+        )
+    }
+
+    private var contentCanvas: some View {
+        ContentPanel(tone: currentSpaceTone, padding: 22) {
+            if model.backstageModule == .promptLibrary {
+                promptLibraryCanvas
+            } else {
+                clipCanvas
+            }
+        }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var clipInspectorColumn: some View {
+        ContentPanel(tone: currentSpaceTone, padding: 18) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Object Studio")
+                            .cosmoDisplayFont("Object Studio", size: 24, weight: .semibold)
+                            .foregroundStyle(CosmoTheme.textPrimary)
+                        Text("当前条目的摘要、分类、标签、笔记与状态，会在这里被精修。")
+                            .cosmoTextFont("当前条目的摘要、分类、标签、笔记与状态，会在这里被精修。", size: 12)
+                            .foregroundStyle(CosmoTheme.textSecondary)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    if let selectedClip = model.selectedClip {
+                        Button {
+                            model.presentClipDetail(selectedClip)
+                        } label: {
+                            ContextChip(title: "View", value: "Expand", tone: currentSpaceTone, icon: "arrow.up.left.and.arrow.down.right")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Rectangle()
+                    .fill(Color.black.opacity(0.06))
+                    .frame(height: 1)
+
+                ScrollView {
+                    ClipInspectorView(clip: model.selectedClip)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(.trailing, 2)
+                }
+                .scrollIndicators(.never)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(minWidth: 320, idealWidth: 340, maxWidth: 360, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private func clipRowButton(clip: ClipItem, searchResult: AISearchResult?) -> some View {
+        AdaptiveClipCard(
+            clip: clip,
+            selected: model.selectedClipID == clip.id,
+            searchResult: searchResult,
+            actions: clipInlineActions(for: clip),
+            tone: currentSpaceTone
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            model.focusClipInBackstage(clip)
+        }
+        .contextMenu {
+            if clip.status != .trashed {
+                Button("标记已读") {
+                    model.markClipAsRead(clip)
+                }
+            }
+            Button(clip.isPinned ? "取消置顶" : "置顶") {
+                model.togglePin(for: clip)
+            }
+            Button(clip.status == .trashed ? "彻底删除" : "删除", role: .destructive) {
+                model.deleteOrTrash(clip)
+            }
+            if let searchResult {
+                Divider()
+                Text(searchResult.source == .semantic ? "AI Match \(Int(searchResult.score * 100))%" : "Fallback \(Int(searchResult.score * 100))%")
+                    .cosmoTextFont(searchResult.source == .semantic ? "AI Match \(Int(searchResult.score * 100))%" : "Fallback \(Int(searchResult.score * 100))%", size: 12, weight: .medium)
+            }
+        }
+    }
+
+    private func clipInlineActions(for clip: ClipItem) -> [AdaptiveClipAction] {
+        var actions: [AdaptiveClipAction] = []
+
+        if clip.status != .trashed {
+            actions.append(
+                AdaptiveClipAction(
+                    title: "已读",
+                    systemImage: "book.closed",
+                    tint: currentSpaceTone.accent,
+                    action: {
+                        model.markClipAsRead(clip)
+                    }
+                )
+            )
+        }
+
+        actions.append(
+            AdaptiveClipAction(
+                title: clip.isPinned ? "取消置顶" : "置顶",
+                systemImage: clip.isPinned ? "pin.slash" : "pin",
+                tint: CosmoTheme.industrialGold,
+                action: {
+                    model.togglePin(for: clip)
+                }
+            )
+        )
+
+        actions.append(
+            AdaptiveClipAction(
+                title: clip.status == .trashed ? "删除" : "移到废纸篓",
+                systemImage: "trash",
+                tint: Color.red,
+                action: {
+                    model.deleteOrTrash(clip)
+                }
+            )
+        )
+
+        return actions
     }
 
     private var suggestedTags: [String] {
@@ -1050,7 +2500,6 @@ public struct RootView: View {
         GeometryReader { proxy in
             let availableWidth = max(320, proxy.size.width - 48)
             let clipDetailHeight = max(360, min(proxy.size.height - 64, 680))
-            let settingsHeight = max(560, min(proxy.size.height - 64, 760))
 
             ZStack {
                 Color.black.opacity(0.28)
@@ -1060,11 +2509,6 @@ public struct RootView: View {
                     }
 
                 switch overlay {
-                case .settings:
-                    overlayCard(width: min(960, availableWidth), maxHeight: settingsHeight) {
-                        SettingsOverlayCard()
-                            .environmentObject(model)
-                    }
                 case .clipDetail:
                     overlayCard(width: min(640, availableWidth), maxHeight: clipDetailHeight) {
                         ClipDetailOverlayCard()
@@ -1086,11 +2530,236 @@ public struct RootView: View {
     }
 }
 
+private struct PromptLibraryWorkbenchView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var draftTitle = ""
+    @State private var draftContent = ""
+
+    private let tone = CosmoTheme.tone(for: "prompt-library")
+
+    private var selectedPrompt: PromptLibraryItem? {
+        model.selectedPrompt
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let selectedPrompt else { return false }
+        return draftTitle != selectedPrompt.title || draftContent != selectedPrompt.content
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            WorkbenchSurface(role: .sidebar, tone: tone, padding: 0, showsAccentLine: false) {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(model.promptItems) { item in
+                            PromptLibraryListRow(
+                                item: item,
+                                selected: model.selectedPromptID == item.id,
+                                tone: tone,
+                                onSelect: {
+                                    model.selectPromptItem(item.id)
+                                }
+                            )
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
+            }
+            .frame(minWidth: 280, idealWidth: 300, maxWidth: 320, maxHeight: .infinity)
+
+            WorkbenchSurface(role: .workspace, tone: tone, padding: 18, showsAccentLine: false) {
+                PromptLibraryEditorPanel(
+                    prompt: selectedPrompt,
+                    tone: tone,
+                    draftTitle: $draftTitle,
+                    draftContent: $draftContent,
+                    hasUnsavedChanges: hasUnsavedChanges,
+                    onSave: {
+                        guard let selectedPrompt else { return }
+                        model.savePromptLibraryItemEdits(id: selectedPrompt.id, title: draftTitle, content: draftContent)
+                    },
+                    onCopy: {
+                        model.copySelectedPromptContent()
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+        .onAppear {
+            syncDrafts(with: selectedPrompt)
+        }
+        .onChange(of: model.selectedPromptID) { _, _ in
+            syncDrafts(with: selectedPrompt)
+        }
+        .onChange(of: model.promptItems) { _, _ in
+            if let selectedPrompt {
+                syncDrafts(with: selectedPrompt)
+            }
+        }
+    }
+
+    private func syncDrafts(with prompt: PromptLibraryItem?) {
+        draftTitle = prompt?.title ?? ""
+        draftContent = prompt?.content ?? ""
+    }
+}
+
+private struct PromptLibraryListRow: View {
+    let item: PromptLibraryItem
+    let selected: Bool
+    let tone: SpaceTone
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button {
+            onSelect()
+        } label: {
+            WorkbenchRow(tone: tone, isSelected: selected, padding: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(item.title)
+                            .cosmoTextFont(item.title, size: 14, weight: .semibold)
+                            .foregroundStyle(CosmoTheme.textPrimary)
+                            .lineLimit(2)
+                        Spacer(minLength: 8)
+                        Text(item.isSystem ? "System" : "Custom")
+                            .cosmoUIFont(item.isSystem ? "System" : "Custom", size: 10, weight: .bold)
+                            .foregroundStyle(item.isSystem ? tone.accent : CosmoTheme.textSecondary)
+                    }
+
+                    Text(item.sourceLabel.isEmpty ? "Custom" : item.sourceLabel)
+                        .cosmoTextFont(item.sourceLabel.isEmpty ? "Custom" : item.sourceLabel, size: 12)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                        .lineLimit(1)
+
+                    Text(item.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                        .cosmoTextFont(item.updatedAt.formatted(date: .abbreviated, time: .shortened), size: 11, weight: .medium)
+                        .foregroundStyle(CosmoTheme.textTertiary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct PromptLibraryEditorPanel: View {
+    let prompt: PromptLibraryItem?
+    let tone: SpaceTone
+    @Binding var draftTitle: String
+    @Binding var draftContent: String
+    let hasUnsavedChanges: Bool
+    let onSave: () -> Void
+    let onCopy: () -> Void
+
+    var body: some View {
+        if let prompt {
+            VStack(alignment: .leading, spacing: 16) {
+                WorkbenchHeader(
+                    title: draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? prompt.title : draftTitle,
+                    subtitle: "这里承接完整提示词编辑、保存与来源追溯；蜂巢层只负责快速调用。",
+                    tone: tone
+                ) {
+                    HStack(spacing: 8) {
+                        Button(action: onCopy) {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .secondary))
+
+                        Button(action: onSave) {
+                            Label("Save Prompt", systemImage: "square.and.arrow.down")
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .primary))
+                        .disabled(!hasUnsavedChanges)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    DetailMetaPill(text: prompt.isSystem ? "System Prompt" : "Custom Prompt", tint: prompt.isSystem ? tone.accent : CosmoTheme.textSecondary)
+                    if !prompt.sourceLabel.isEmpty {
+                        DetailMetaPill(text: prompt.sourceLabel, tint: CosmoTheme.textSecondary)
+                    }
+                    DetailMetaPill(text: prompt.updatedAt.formatted(date: .abbreviated, time: .shortened), tint: CosmoTheme.textSecondary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Title")
+                        .cosmoUIFont("Title", size: 11, weight: .bold)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                    WorkbenchInputShell(tone: tone) {
+                        TextField("Prompt title", text: $draftTitle)
+                            .textFieldStyle(.plain)
+                            .cosmoInputFont()
+                            .foregroundStyle(CosmoTheme.textPrimary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Content")
+                            .cosmoUIFont("Content", size: 11, weight: .bold)
+                            .foregroundStyle(CosmoTheme.textSecondary)
+                        Spacer()
+                        Text("\(draftContent.count) chars")
+                            .cosmoTextFont("\(draftContent.count) chars", size: 11, weight: .medium)
+                            .foregroundStyle(CosmoTheme.textTertiary)
+                    }
+                    WorkbenchInputShell(tone: tone) {
+                        TextEditor(text: $draftContent)
+                            .font(CosmoTypography.songti(size: 15))
+                            .foregroundStyle(CosmoTheme.textPrimary)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 360)
+                    }
+                }
+
+                if !prompt.sourceURL.isEmpty, let url = URL(string: prompt.sourceURL) {
+                    Link(destination: url) {
+                        Label("Open Source Reference", systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .ghost))
+                }
+            }
+        } else {
+            ContentUnavailableView(
+                "No prompt selected",
+                systemImage: "hexagon",
+                description: Text("从左侧选择一个提示词，或者新建一条来开始编辑。").cosmoTextFont("从左侧选择一个提示词，或者新建一条来开始编辑。", size: 14)
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+private struct DetailMetaPill: View {
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        Text(text)
+            .cosmoTextFont(text, size: 11, weight: .semibold, design: .rounded)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                Rectangle()
+                    .fill(CosmoTheme.rowFill)
+                    .overlay(
+                        Rectangle()
+                            .strokeBorder(CosmoTheme.divider, lineWidth: 1)
+                    )
+            )
+    }
+}
+
 struct TimeboxComposer: View {
     @Binding var draft: TimeboxDraft
+    var tone: SpaceTone = .neutral
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Text("Mode")
+                .cosmoUIFont("Mode", size: 10, weight: .bold, design: .rounded)
+                .foregroundStyle(CosmoTheme.textTertiary)
             Picker("Timebox", selection: $draft.mode) {
                 Text("All").tag(TimeboxMode.all)
                 Text("Past N Hours").tag(TimeboxMode.trailingHours)
@@ -1098,11 +2767,13 @@ struct TimeboxComposer: View {
                 Text("Range").tag(TimeboxMode.range)
             }
             .pickerStyle(.menu)
+            .labelsHidden()
 
             switch draft.mode {
             case .all:
                 Text("All time")
-                    .foregroundStyle(CosmoPalette.textSecondary)
+                    .cosmoTextFont("All time", size: 12)
+                    .foregroundStyle(CosmoTheme.textSecondary)
             case .trailingHours:
                 Stepper("\(draft.trailingHours)h", value: $draft.trailingHours, in: 1...720)
             case .day:
@@ -1118,13 +2789,332 @@ struct TimeboxComposer: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(CosmoPalette.surfaceSoft)
+            Rectangle()
+                .fill(CosmoTheme.panelGradient(tier: .input, tone: tone))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(CosmoPalette.line, lineWidth: 1)
+                    Rectangle()
+                        .strokeBorder(CosmoTheme.divider, lineWidth: 1)
                 )
         )
+    }
+}
+
+private struct TodoWorkbenchView: View {
+    @EnvironmentObject private var model: AppModel
+
+    let tone: SpaceTone
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            WorkbenchInputShell(tone: tone) {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(tone.accent)
+
+                    TextField("Add a task to the backstage queue", text: $model.todoDraft)
+                        .textFieldStyle(.plain)
+                        .cosmoInputFont()
+                        .foregroundStyle(CosmoTheme.textPrimary)
+                        .onSubmit {
+                            model.submitTodoDraft()
+                        }
+
+                    Button("Add") {
+                        model.submitTodoDraft()
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .primary))
+                    .disabled(model.todoDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+
+            if model.todoItems.isEmpty {
+                ContentUnavailableView(
+                    "No pending todos",
+                    systemImage: "checklist.unchecked",
+                    description: Text("在上方直接输入待办，或从 Recall 的 todo cloud 带回一条任务。").cosmoTextFont("在上方直接输入待办，或从 Recall 的 todo cloud 带回一条任务。", size: 14)
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(model.todoItems) { item in
+                            TodoWorkbenchRow(item: item, tone: tone)
+                                .environmentObject(model)
+                        }
+                    }
+                    .padding(.trailing, 2)
+                }
+                .scrollIndicators(.never)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct TodoWorkbenchRow: View {
+    @EnvironmentObject private var model: AppModel
+
+    let item: TodoItem
+    let tone: SpaceTone
+
+    private var isSelected: Bool {
+        model.todoFocusedItemID == item.id
+    }
+
+    private var isEditing: Bool {
+        model.todoEditingItemID == item.id
+    }
+
+    var body: some View {
+        WorkbenchRow(tone: tone, isSelected: isSelected, padding: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                Button {
+                    model.completeTodo(item.id)
+                } label: {
+                    Image(systemName: "checkmark.square")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(tone.accent)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    if isEditing {
+                        TextField("Todo title", text: $model.todoEditingDraft)
+                            .textFieldStyle(.plain)
+                            .cosmoInputFont()
+                            .foregroundStyle(CosmoTheme.textPrimary)
+                            .onSubmit {
+                                model.finishTodoEditing(commit: true)
+                            }
+                    } else {
+                        Text(item.title)
+                            .cosmoTextFont(item.title, size: 14, weight: .semibold)
+                            .foregroundStyle(CosmoTheme.textPrimary)
+                            .lineLimit(2)
+                    }
+
+                    Text(item.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                        .cosmoTextFont(item.updatedAt.formatted(date: .abbreviated, time: .shortened), size: 11)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                }
+
+                Spacer(minLength: 8)
+
+                if isEditing {
+                    HStack(spacing: 8) {
+                        Button("Save") {
+                            model.finishTodoEditing(commit: true)
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .primary))
+
+                        Button("Cancel") {
+                            model.finishTodoEditing(commit: false)
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .ghost))
+                    }
+                } else {
+                    Button {
+                        model.beginTodoEditing(item)
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .ghost))
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if model.todoEditingItemID != nil, model.todoEditingItemID != item.id {
+                model.finishTodoEditing(commit: true)
+            }
+            model.selectTodoItem(item.id)
+        }
+    }
+}
+
+private struct ClipboardReadingCard: View {
+    @EnvironmentObject private var model: AppModel
+
+    let clip: ClipItem
+    @Binding var content: String
+    @Binding var category: String
+    @Binding var tags: String
+    let onCopy: () -> Void
+    let onSave: () -> Void
+
+    private var payload: ClipboardReadingPayload? {
+        hasUnsavedTextChanges ? nil : clip.readingPayload
+    }
+
+    private var tone: SpaceTone {
+        if !clip.spaceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return CosmoTheme.tone(for: clip.spaceName)
+        }
+        return CosmoTheme.platformTone(for: clip.platformBucket)
+    }
+
+    private var isEnglish: Bool {
+        isLikelyEnglishText(content)
+    }
+
+    private var hasUnsavedTextChanges: Bool {
+        content.trimmingCharacters(in: .whitespacesAndNewlines) != clip.content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Clipboard Reading")
+                        .cosmoUIFont("Clipboard Reading", size: 11, weight: .bold, design: .rounded)
+                        .foregroundStyle(tone.accent)
+                    Text(payload?.titleChinese.isEmpty == false ? payload?.titleChinese ?? clip.title : clip.title)
+                        .cosmoDisplayFont(payload?.titleChinese.isEmpty == false ? payload?.titleChinese ?? clip.title : clip.title, size: 28, weight: .semibold)
+                        .foregroundStyle(CosmoTheme.textPrimary)
+                    Text(isEnglish ? "英文原文已整理为双语对照，保留原始段落顺序。" : "纯文本内容已转成更适合沉浸阅读的卡片。")
+                        .cosmoTextFont(isEnglish ? "英文原文已整理为双语对照，保留原始段落顺序。" : "纯文本内容已转成更适合沉浸阅读的卡片。", size: 13)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                }
+                Spacer()
+                if isEnglish {
+                    Button(model.readingGenerationRunning.contains(clip.id) ? "Generating…" : "Refresh Bilingual") {
+                        model.refreshClipboardReading(for: clip.id, force: true)
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .ghost))
+                    .disabled(model.readingGenerationRunning.contains(clip.id) || hasUnsavedTextChanges)
+                }
+            }
+
+            RuleDivider(strong: true)
+
+            if let summary = payload?.summaryChinese, !summary.isEmpty {
+                Text(summary)
+                    .cosmoTextFont(summary, size: 16)
+                    .foregroundStyle(CosmoTheme.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if model.readingGenerationRunning.contains(clip.id) {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("正在生成双语阅读版…")
+                        .cosmoTextFont("正在生成双语阅读版…", size: 14)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                }
+            } else if hasUnsavedTextChanges && isEnglish {
+                Text("当前正文已有未保存修改。保存后会按最新内容重新生成双语对照。")
+                    .cosmoTextFont("当前正文已有未保存修改。保存后会按最新内容重新生成双语对照。", size: 13)
+                    .foregroundStyle(CosmoTheme.textSecondary)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Text")
+                    .cosmoUIFont("Text", size: 11, weight: .bold)
+                    .foregroundStyle(CosmoTheme.textSecondary)
+                TextEditor(text: $content)
+                    .font(CosmoTextClassifier.containsChinese(content) ? CosmoTypography.songti(size: 19) : .custom("Baskerville", size: 19))
+                    .foregroundStyle(CosmoTheme.textPrimary)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 260)
+                RuleDivider()
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                if let payload, !payload.paragraphs.isEmpty {
+                    Text("Bilingual Reading")
+                        .cosmoUIFont("Bilingual Reading", size: 11, weight: .bold)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                    ForEach(Array(payload.paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                        ClipboardParallelParagraph(paragraph: paragraph, tone: tone)
+                    }
+
+                    if payload.isPartial {
+                        Text("当前双语对照基于导入内容的前几段自动生成，完整原文仍保留在上方可编辑区域。")
+                            .cosmoTextFont("当前双语对照基于导入内容的前几段自动生成，完整原文仍保留在上方可编辑区域。", size: 12)
+                            .foregroundStyle(CosmoTheme.textSecondary)
+                    }
+                }
+            }
+
+            RuleDivider()
+
+            HStack(spacing: 12) {
+                Button(action: onCopy) {
+                    Label("Copy Text", systemImage: "doc.on.doc")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .secondary))
+
+                Button(action: onSave) {
+                    Label("Save Clip", systemImage: "square.and.arrow.down")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .primary))
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Category")
+                        .cosmoUIFont("Category", size: 11, weight: .bold)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                    TextField("Category", text: $category)
+                        .textFieldStyle(.plain)
+                        .font(CosmoTypography.songti(size: 16))
+                        .foregroundStyle(CosmoTheme.textPrimary)
+                    RuleDivider()
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Tags")
+                        .cosmoUIFont("Tags", size: 11, weight: .bold)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                    TextField("tag1, tag2", text: $tags)
+                        .textFieldStyle(.plain)
+                        .font(CosmoTypography.songti(size: 16))
+                        .foregroundStyle(CosmoTheme.textPrimary)
+                    RuleDivider()
+                }
+            }
+        }
+    }
+}
+
+private struct ClipboardParallelParagraph: View {
+    let paragraph: ClipboardReadingParagraph
+    let tone: SpaceTone
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Original")
+                    .cosmoUIFont("Original", size: 11, weight: .bold)
+                    .foregroundStyle(CosmoTheme.textSecondary)
+                Text(paragraph.original)
+                    .font(.custom("Baskerville", size: 18))
+                    .foregroundStyle(CosmoTheme.textPrimary)
+                    .lineSpacing(6)
+                    .textSelection(.enabled)
+            }
+
+            if !paragraph.translation.isEmpty {
+                RuleDivider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("中文")
+                        .cosmoUIFont("中文", size: 11, weight: .bold)
+                        .foregroundStyle(CosmoTheme.textSecondary)
+                    Text(paragraph.translation)
+                        .font(CosmoTypography.songti(size: 18))
+                        .foregroundStyle(CosmoTheme.textPrimary)
+                        .lineSpacing(8)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
     }
 }
 
@@ -1133,6 +3123,7 @@ struct ClipInspectorView: View {
 
     let clip: ClipItem?
 
+    @State private var bodyText = ""
     @State private var aiSummary = ""
     @State private var category = ""
     @State private var tags = ""
@@ -1143,162 +3134,43 @@ struct ClipInspectorView: View {
         Group {
             if let clip {
                 VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(clip.platformBucket.title)
-                            .cosmoTextFont(clip.platformBucket.title, size: 12, weight: .semibold)
-                            .foregroundStyle(CosmoPalette.textSecondary)
-                        Text(clip.title)
-                            .cosmoTextFont(clip.title, size: 28, weight: .semibold, design: .serif)
-                            .foregroundStyle(CosmoPalette.ink)
-                        Text(clip.url)
-                            .cosmoTextFont(clip.url, size: 13)
-                            .foregroundStyle(CosmoPalette.textSecondary)
-                            .textSelection(.enabled)
-                    }
-
-                    HStack(spacing: 10) {
-                        InfoBadge(title: "Captured", value: clip.capturedAt.formatted(date: .abbreviated, time: .shortened))
-                        InfoBadge(title: "Source", value: clip.sourceType.rawValue)
-                        if !clip.spaceName.isEmpty {
-                            InfoBadge(title: "Space", value: clip.spaceName)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("Summary")
-                                .font(.headline)
-                            Spacer()
-                            if model.summaryGenerationRunning.contains(clip.id) {
-                                ProgressView()
-                                    .controlSize(.small)
-                            } else {
-                                Button("Refresh AI Summary") {
-                                    model.refreshAISummary(for: clip.id)
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                        }
-                        ZStack(alignment: .topLeading) {
-                            if aiSummary.isEmpty {
-                                Text("正在准备中文摘要…")
-                                    .cosmoTextFont("正在准备中文摘要…", size: 14)
-                                    .foregroundStyle(CosmoPalette.textSecondary)
-                                    .padding(.top, 16)
-                                    .padding(.leading, 14)
-                            }
-                            TextEditor(text: $aiSummary)
-                                .cosmoInputFont(size: 14)
-                                .scrollContentBackground(.hidden)
-                                .frame(minHeight: 130)
-                                .padding(8)
-                        }
-                        .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(CosmoPalette.surfaceSoft)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .strokeBorder(CosmoPalette.line, lineWidth: 1)
-                                )
-                        )
-                    }
-
-                    HStack(spacing: 10) {
-                        Button {
-                            model.openSelectedClipURL()
-                        } label: {
-                            Label("Open URL", systemImage: "arrow.up.right.square")
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 11)
-                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
-                        .disabled(clip.url.hasPrefix("clipboard://"))
-
-                        Button {
-                            model.copySelectedClipURL()
-                        } label: {
-                            Label("Copy URL", systemImage: "link")
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 11)
-                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.surface))
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Category")
-                            .font(.headline)
-                        TextField("Category", text: $category)
-                            .cosmoInputFont()
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Tags")
-                            .font(.headline)
-                        TextField("tag1, tag2", text: $tags)
-                            .cosmoInputFont()
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Note")
-                            .font(.headline)
-                        TextEditor(text: $note)
-                            .cosmoInputFont()
-                            .frame(minHeight: 150)
-                            .padding(8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(CosmoPalette.surfaceSoft)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                            .strokeBorder(CosmoPalette.line, lineWidth: 1)
-                                    )
-                            )
-                    }
-
-                    Picker("Status", selection: $status) {
-                        Text("Inbox").tag(ClipStatus.inbox)
-                        Text("Library").tag(ClipStatus.library)
-                        Text("Failed").tag(ClipStatus.failed)
-                        Text("Trash").tag(ClipStatus.trashed)
-                    }
-                    .pickerStyle(.segmented)
-
-                    Button {
-                        model.saveClipEdits(
-                            id: clip.id,
-                            aiSummary: aiSummary,
-                            category: category,
-                            tagsText: tags,
-                            note: note,
-                            status: status
-                        )
-                    } label: {
-                        Label("Save Clip", systemImage: "square.and.arrow.down")
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .frame(maxWidth: .infinity)
-                            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    }
-                    .buttonStyle(SurfaceButtonStyle(fill: CosmoPalette.chipSelectedFill, foreground: CosmoPalette.chipSelectedText, border: CosmoPalette.chipSelectedStroke))
+                    standardInspectorBody(for: clip)
                 }
                 .onAppear {
                     populate(from: clip)
                     updateDirtyState(for: clip)
+                    model.refreshAIEnrichment(for: clip.id, force: false)
+                    if clip.isPlainTextClipboardCapture {
+                        model.refreshClipboardReading(for: clip.id)
+                    }
                 }
                 .onChange(of: clip.id) { _, _ in
                     populate(from: clip)
                     updateDirtyState(for: clip)
+                    model.refreshAIEnrichment(for: clip.id, force: false)
+                    if clip.isPlainTextClipboardCapture {
+                        model.refreshClipboardReading(for: clip.id)
+                    }
                 }
                 .onChange(of: clip.aiSummary) { _, value in
                     guard !model.clipEditorHasUnsavedChanges else { return }
                     aiSummary = value
                     updateDirtyState(for: clip)
                 }
+                .onChange(of: clip.content) { _, value in
+                    guard !model.clipEditorHasUnsavedChanges else { return }
+                    bodyText = value
+                    updateDirtyState(for: clip)
+                }
+                .onChange(of: clip.readingPayloadJSON) { _, _ in
+                    guard !model.clipEditorHasUnsavedChanges else { return }
+                    populate(from: clip)
+                    updateDirtyState(for: clip)
+                }
                 .onChange(of: aiSummary) { _, _ in
+                    updateDirtyState(for: clip)
+                }
+                .onChange(of: bodyText) { _, _ in
                     updateDirtyState(for: clip)
                 }
                 .onChange(of: category) { _, _ in
@@ -1319,7 +3191,333 @@ struct ClipInspectorView: View {
         }
     }
 
+    @ViewBuilder
+    private func standardInspectorBody(for clip: ClipItem) -> some View {
+        let tone = inspectorTone(for: clip)
+        let isPlainTextClipboard = clip.isPlainTextClipboardCapture
+        let hasOriginalURL = !(URL(string: clip.url)?.scheme?.lowercased() == "clipboard")
+        let hasUnsavedClipboardTextChanges = isPlainTextClipboard && bodyText.trimmingCharacters(in: .whitespacesAndNewlines) != clip.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clipboardPayload = isPlainTextClipboard && !hasUnsavedClipboardTextChanges ? clip.readingPayload : nil
+        let isEnglishClipboard = isPlainTextClipboard && isLikelyEnglishText(bodyText)
+        let clipboardLocalizedTitle = clipboardPayload?.titleChinese.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let displayTitle = clipboardLocalizedTitle.isEmpty ? clip.title : clipboardLocalizedTitle
+
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(clip.platformBucket.title)
+                    .cosmoUIFont(clip.platformBucket.title, size: 11, weight: .bold, design: .rounded)
+                    .foregroundStyle(tone.accent)
+                Text(displayTitle)
+                    .cosmoDisplayFont(displayTitle, size: 29, weight: .semibold)
+                    .foregroundStyle(CosmoTheme.textPrimary)
+                Text(clip.url)
+                    .cosmoTextFont(clip.url, size: 13)
+                    .foregroundStyle(CosmoTheme.textSecondary)
+                    .textSelection(.enabled)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    documentMetaLabel(text: clip.capturedAt.formatted(date: .abbreviated, time: .shortened), tone: tone)
+                    documentMetaLabel(text: clip.sourceType == .clipboard ? "clipboard" : "web", tone: tone)
+                    if !clip.spaceName.isEmpty {
+                        documentMetaLabel(text: clip.spaceName, tone: tone)
+                    }
+                    if !clip.tags.isEmpty {
+                        ForEach(Array(clip.tags.prefix(6)), id: \.self) { tag in
+                            documentMetaLabel(text: tag, tone: tone)
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                if hasOriginalURL {
+                    Button {
+                        model.openClipURL(clip)
+                    } label: {
+                        Label("Open Original", systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .secondary))
+                } else {
+                    Button {
+                        model.copyText(clip.content)
+                    } label: {
+                        Label("Copy Text", systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .secondary))
+
+                    if isEnglishClipboard {
+                        Button {
+                            model.refreshClipboardReading(for: clip.id, force: true)
+                        } label: {
+                            Label(model.readingGenerationRunning.contains(clip.id) ? "Generating…" : "Refresh Bilingual", systemImage: "character.book.closed")
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .ghost))
+                        .disabled(model.readingGenerationRunning.contains(clip.id) || hasUnsavedClipboardTextChanges)
+                    }
+                }
+
+                if hasOriginalURL {
+                    Button {
+                        model.copyClipURL(clip)
+                    } label: {
+                        Label("Copy Source", systemImage: "link")
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .ghost))
+                }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    model.refreshAIEnrichment(for: clip.id)
+                } label: {
+                    Label(model.summaryGenerationRunning.contains(clip.id) ? "Analyzing…" : "Refresh Analysis", systemImage: "sparkles")
+                }
+                .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .ghost))
+                .disabled(model.summaryGenerationRunning.contains(clip.id))
+            }
+
+            RuleDivider(strong: true)
+
+            documentSection(title: "Summary", subtitle: "AI enrichment 会在首次整理后直接持久化，后续只在你主动刷新或内容变化时重算。") {
+                documentTextArea(
+                    text: $aiSummary,
+                    placeholder: model.summaryGenerationRunning.contains(clip.id) ? "正在深度分析内容并生成摘要与标签…" : "这里会显示持久化后的 AI 摘要。你也可以继续人工精修。",
+                    minHeight: 130
+                )
+            }
+
+            if isPlainTextClipboard {
+                documentSection(title: "Text", subtitle: isEnglishClipboard ? "正文在这里保持可编辑，保存后会基于最新文本刷新双语阅读结果。" : "剪贴板内容在这里作为正文继续整理，不再套用独立卡片。") {
+                    documentEditor(
+                        text: $bodyText,
+                        placeholder: "Paste or edit the captured text here",
+                        minHeight: 220,
+                        font: CosmoTextClassifier.containsChinese(bodyText) ? CosmoTypography.songti(size: 18) : .custom("Baskerville", size: 18)
+                    )
+                }
+            }
+
+            if isPlainTextClipboard {
+                documentSection(
+                    title: isEnglishClipboard ? "Bilingual Reading" : "Reading Notes",
+                    subtitle: isEnglishClipboard ? "双语结果和原文保持同一阅读流，避免再出现独立卡片容器。" : "非英文文本以正文编辑为主，这里保留阅读层信息。"
+                ) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if let summary = clipboardPayload?.summaryChinese, !summary.isEmpty {
+                            Text(summary)
+                                .cosmoTextFont(summary, size: 15)
+                                .foregroundStyle(CosmoTheme.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        if let clipboardPayload, !clipboardPayload.paragraphs.isEmpty {
+                            ForEach(Array(clipboardPayload.paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                                ClipboardParallelParagraph(paragraph: paragraph, tone: tone)
+                            }
+
+                            if clipboardPayload.isPartial {
+                                Text("当前双语对照基于导入内容的前几段自动生成，完整原文仍保留在上方正文中。")
+                                    .cosmoTextFont("当前双语对照基于导入内容的前几段自动生成，完整原文仍保留在上方正文中。", size: 12)
+                                    .foregroundStyle(CosmoTheme.textSecondary)
+                            }
+                        } else if model.readingGenerationRunning.contains(clip.id) {
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("正在生成双语阅读版…")
+                                    .cosmoTextFont("正在生成双语阅读版…", size: 14)
+                                    .foregroundStyle(CosmoTheme.textSecondary)
+                            }
+                        } else if hasUnsavedClipboardTextChanges && isEnglishClipboard {
+                            Text("当前正文有未保存修改。先保存，再基于最新文本刷新双语阅读结果。")
+                                .cosmoTextFont("当前正文有未保存修改。先保存，再基于最新文本刷新双语阅读结果。", size: 13)
+                                .foregroundStyle(CosmoTheme.textSecondary)
+                        } else {
+                            Text(isEnglishClipboard ? "保存当前正文后，可以继续生成或刷新双语阅读结果。" : "这类条目主要以正文、摘要、标签和笔记为主，不再额外包裹成阅读卡片。")
+                                .cosmoTextFont(isEnglishClipboard ? "保存当前正文后，可以继续生成或刷新双语阅读结果。" : "这类条目主要以正文、摘要、标签和笔记为主，不再额外包裹成阅读卡片。", size: 13)
+                                .foregroundStyle(CosmoTheme.textSecondary)
+                        }
+                    }
+                }
+            }
+
+            documentSection(title: "Category", subtitle: "分类用于给对象一个人类可读的主语义。") {
+                documentField(text: $category, placeholder: "例如：产品文档 / 视频 / 技术博客")
+            }
+
+            documentSection(title: "Tags", subtitle: "标签按重要性排序：前面是载体属性与结构用途，后面是主题与专有名词。") {
+                documentTextArea(
+                    text: $tags,
+                    placeholder: "article, docs, tutorial, workflow, api, openai, agent, search, macos",
+                    minHeight: 110
+                )
+            }
+
+            documentSection(title: "Notes", subtitle: "把你的判断、批注和后续动作写在对象旁边。") {
+                documentTextArea(
+                    text: $note,
+                    placeholder: "Write editorial notes, synthesis, or next actions",
+                    minHeight: 150
+                )
+            }
+
+            documentSection(title: "Status", subtitle: "文档页脚只保留一个轻量状态切换。") {
+                HStack(spacing: 14) {
+                    documentStatusButton(.inbox, tone: tone)
+                    documentStatusButton(.library, tone: tone)
+                    documentStatusButton(.failed, tone: tone)
+                    documentStatusButton(.trashed, tone: tone)
+                    Spacer(minLength: 0)
+                }
+            }
+
+            RuleDivider(strong: true)
+
+            Button {
+                model.saveClipEdits(
+                    id: clip.id,
+                    aiSummary: aiSummary,
+                    category: category,
+                    tagsText: tags,
+                    note: note,
+                    status: status,
+                    contentText: isPlainTextClipboard ? bodyText : nil
+                )
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 14, weight: .bold))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Save Clip")
+                            .cosmoUIFont("Save Clip", size: 14, weight: .bold)
+                        Text("提交当前对象的整理结果")
+                            .cosmoTextFont("提交当前对象的整理结果", size: 12)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(CosmoTheme.carbon)
+                .padding(.horizontal, 0)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ConsoleButtonStyle(tone: tone, variant: .primary))
+        }
+    }
+
+    private func inspectorTone(for clip: ClipItem) -> SpaceTone {
+        if !clip.spaceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return CosmoTheme.tone(for: clip.spaceName)
+        }
+        return CosmoTheme.platformTone(for: clip.platformBucket)
+    }
+
+    private func documentMetaLabel(text: String, tone: SpaceTone) -> some View {
+        Text(text)
+            .cosmoUIFont(text, size: 11, weight: .bold, design: .rounded)
+            .foregroundStyle(tone.ribbon)
+            .padding(.horizontal, 0)
+            .padding(.vertical, 2)
+    }
+
+    private func documentSection<Content: View>(title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .cosmoDisplayFont(title, size: 19, weight: .semibold)
+                .foregroundStyle(CosmoTheme.textPrimary)
+            Text(subtitle)
+                .cosmoTextFont(subtitle, size: 12)
+                .foregroundStyle(CosmoTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            content()
+        }
+    }
+
+    private func documentField(text: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .leading) {
+                if text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(placeholder)
+                        .cosmoTextFont(placeholder, size: 14)
+                        .foregroundStyle(CosmoTheme.textTertiary)
+                }
+                TextField("", text: text)
+                    .textFieldStyle(.plain)
+                    .cosmoInputFont(size: 15)
+                    .foregroundStyle(CosmoTheme.textPrimary)
+            }
+            RuleDivider()
+        }
+    }
+
+    private func documentTextArea(text: Binding<String>, placeholder: String, minHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .topLeading) {
+                if text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(placeholder)
+                        .cosmoTextFont(placeholder, size: 14)
+                        .foregroundStyle(CosmoTheme.textTertiary)
+                        .padding(.top, 2)
+                }
+                TextEditor(text: text)
+                    .cosmoInputFont(size: 14)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: minHeight)
+            }
+            RuleDivider()
+        }
+    }
+
+    private func documentEditor(text: Binding<String>, placeholder: String, minHeight: CGFloat, font: Font) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .topLeading) {
+                if text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(placeholder)
+                        .cosmoTextFont(placeholder, size: 14)
+                        .foregroundStyle(CosmoTheme.textTertiary)
+                        .padding(.top, 2)
+                }
+                TextEditor(text: text)
+                    .font(font)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: minHeight)
+            }
+            RuleDivider()
+        }
+    }
+
+    private func documentStatusButton(_ candidate: ClipStatus, tone: SpaceTone) -> some View {
+        Button {
+            status = candidate
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(statusLabel(candidate))
+                    .cosmoUIFont(statusLabel(candidate), size: 12, weight: .bold, design: .rounded)
+                    .foregroundStyle(status == candidate ? CosmoTheme.textPrimary : CosmoTheme.textSecondary)
+                Rectangle()
+                    .fill(status == candidate ? CosmoTheme.statusColor(for: candidate) : CosmoTheme.divider)
+                    .frame(width: 54, height: status == candidate ? 2 : 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func statusLabel(_ candidate: ClipStatus) -> String {
+        switch candidate {
+        case .inbox:
+            return "Inbox"
+        case .library:
+            return "Library"
+        case .failed:
+            return "Failed"
+        case .trashed:
+            return "Trash"
+        }
+    }
+
     private func populate(from clip: ClipItem) {
+        bodyText = clip.content
         aiSummary = clip.aiSummary
         category = clip.category
         tags = clip.tags.joined(separator: ", ")
@@ -1334,7 +3532,8 @@ struct ClipInspectorView: View {
             category: category,
             tagsText: tags,
             note: note,
-            status: status
+            status: status,
+            contentText: clip.isPlainTextClipboardCapture ? bodyText : nil
         )
     }
 }
@@ -1451,44 +3650,13 @@ public struct SettingsRootView: View {
     public init() {}
 
     public var body: some View {
-        settingsLayout
-    }
-
-    @ViewBuilder
-    fileprivate var settingsLayout: some View {
-        HStack(alignment: .top, spacing: 18) {
-            CardSurface {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Settings")
-                        .font(.system(size: 28, weight: .semibold, design: .serif))
-                        .foregroundStyle(CosmoPalette.ink)
-                    Text("这里使用自定义侧边导航，保证外部按钮点击后一定能切到对应页面。")
-                        .cosmoTextFont("这里使用自定义侧边导航，保证外部按钮点击后一定能切到对应页面。", size: 13)
-                        .foregroundStyle(CosmoPalette.textSecondary)
-
-                    ForEach(SettingsTab.allCases) { tab in
-                        Button {
-                            model.selectedSettingsTab = tab
-                        } label: {
-                            Label(tab.title, systemImage: tab.systemImage)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 12)
-                                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(SettingsSidebarButtonStyle(selected: model.selectedSettingsTab == tab))
-                    }
-                }
-            }
-            .frame(width: 250, alignment: .topLeading)
-
-            CardSurface {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
                 settingsContent
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .frame(minWidth: 860, minHeight: 700)
-        .padding(18)
+        .scrollIndicators(.never)
     }
 
     @ViewBuilder
@@ -1737,7 +3905,7 @@ struct ShortcutSettingsView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Global Shortcuts")
                 .font(.title2.weight(.semibold))
-            Text("Record the shortcut you want, then save. Conflicts are blocked before Carbon rebinds the keys.")
+            Text("Recall Overlay 现在是系统级主入口；剪贴板采集保留为辅助快捷键。保存前会先拦截冲突。")
                 .foregroundStyle(CosmoPalette.textSecondary)
 
             if let conflict = model.shortcutConflict {
@@ -1748,7 +3916,7 @@ struct ShortcutSettingsView: View {
                     .background(RoundedRectangle(cornerRadius: 14).fill(Color.red.opacity(0.12)))
             }
 
-            ShortcutRecorder(label: ShortcutAction.captureCurrentPage.title, combination: $localShortcuts.captureCurrentPage)
+            ShortcutRecorder(label: ShortcutAction.openRecallOverlay.title, combination: $localShortcuts.openRecallOverlay)
             ShortcutRecorder(label: ShortcutAction.captureClipboard.title, combination: $localShortcuts.captureClipboard)
 
             Button("Save Shortcuts") {
@@ -1885,20 +4053,20 @@ struct StatPill: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(CosmoPalette.textSecondary)
+                .cosmoUIFont(title, size: 10, weight: .bold, design: .rounded)
+                .foregroundStyle(Color.white.opacity(0.48))
             Text(value)
-                .font(.headline)
-                .foregroundStyle(CosmoPalette.ink)
+                .cosmoDisplayFont(value, size: 20, weight: .semibold)
+                .foregroundStyle(.white.opacity(0.96))
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(CosmoPalette.surface)
+                .fill(Color.white.opacity(0.08))
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(CosmoPalette.line, lineWidth: 1)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
                 )
         )
     }
