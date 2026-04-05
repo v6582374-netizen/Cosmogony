@@ -1034,7 +1034,7 @@ public struct RootView: View {
     private var sidebarWidth: CGFloat {
         switch model.backstageModule {
         case .clips:
-            return 286
+            return 248
         case .promptLibrary:
             return 270
         case .todo:
@@ -2357,9 +2357,9 @@ public struct RootView: View {
             }
         }
         .frame(
-            minWidth: model.backstageModule == .clips ? 230 : 248,
-            idealWidth: model.backstageModule == .clips ? 236 : 260,
-            maxWidth: model.backstageModule == .clips ? 240 : 278,
+            minWidth: model.backstageModule == .clips ? 194 : 248,
+            idealWidth: model.backstageModule == .clips ? 202 : 260,
+            maxWidth: model.backstageModule == .clips ? 208 : 278,
             alignment: .topLeading
         )
     }

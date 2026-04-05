@@ -17,6 +17,7 @@ EXTENSION_ICON_DIR="$ROOT_DIR/../../legacy/chrome-extension/public"
 EXECUTABLE_SOURCE="$RELEASE_DIR/CosmogonyApp"
 EXECUTABLE_TARGET="$MACOS_DIR/$APP_NAME"
 ZIP_PATH="$DIST_DIR/$APP_NAME.zip"
+DMG_PATH="$DIST_DIR/$APP_NAME.dmg"
 
 echo "Building release binary..."
 cd "$ROOT_DIR"
@@ -28,7 +29,7 @@ if [[ ! -f "$EXECUTABLE_SOURCE" ]]; then
 fi
 
 mkdir -p "$DIST_DIR"
-rm -rf "$APP_DIR" "$ZIP_PATH"
+rm -rf "$APP_DIR" "$ZIP_PATH" "$DMG_PATH"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 echo "Preparing app icon assets..."
@@ -135,6 +136,15 @@ echo "Creating zip archive..."
 ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ZIP_PATH"
 find "$DIST_DIR" -name '._*' -delete
 
+echo "Creating dmg archive..."
+hdiutil create \
+  -volname "$APP_NAME" \
+  -srcfolder "$APP_DIR" \
+  -ov \
+  -format UDZO \
+  "$DMG_PATH" >/dev/null
+
 echo "Done."
 echo "App bundle: $APP_DIR"
 echo "Zip archive: $ZIP_PATH"
+echo "DMG archive: $DMG_PATH"

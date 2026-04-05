@@ -1034,41 +1034,54 @@ struct AdaptiveClipCard: View {
         }
     }
 
+    private var scoreOrTimestampLabel: String {
+        if let searchResult {
+            return searchResult.source == .semantic
+                ? "AI \(Int(searchResult.score * 100))%"
+                : "Fallback \(Int(searchResult.score * 100))%"
+        }
+
+        return clip.capturedAt.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private var summaryText: String {
+        if searchResult?.matchedSnippet.isEmpty == false {
+            return searchResult?.matchedSnippet ?? ""
+        }
+
+        return clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary
+    }
+
+    private var trailingDetailText: String? {
+        if let searchResult, !searchResult.matchedFields.isEmpty {
+            return searchResult.matchedFields.prefix(4).map(\.label).joined(separator: " · ")
+        }
+
+        if !clip.tags.isEmpty {
+            return clip.tags.prefix(4).joined(separator: " · ")
+        }
+
+        return nil
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             Rectangle()
                 .fill(platformTone.accent)
-                .frame(width: selected ? 12 : 7)
+                .frame(width: selected ? 8 : 4)
 
             HStack(alignment: .top, spacing: 16) {
                 AdaptiveClipIconBadge(clip: clip, tone: platformTone)
 
-                VStack(alignment: .leading, spacing: 12) {
-                    header
+                VStack(alignment: .leading, spacing: 5) {
+                    topRow
                     summaryBlock
                     footer
                 }
-
-                Spacer(minLength: 0)
-
-                VStack(alignment: .trailing, spacing: 12) {
-                    HStack(spacing: 8) {
-                        ForEach(actions) { action in
-                            AdaptiveClipActionButton(action: action)
-                        }
-                    }
-
-                    if selected {
-                        Image(systemName: "arrowtriangle.right.fill")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(tone.accent)
-                    } else {
-                        Spacer(minLength: 0)
-                    }
-                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
         }
         .background(
             Rectangle()
@@ -1080,119 +1093,142 @@ struct AdaptiveClipCard: View {
         )
     }
 
-    private var header: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(clip.platformBucket.title)
-                        .cosmoUIFont(clip.platformBucket.title, size: 11, weight: .bold, design: .rounded)
-                        .foregroundStyle(platformTone.ribbon)
-                    if clip.isPinned {
-                        Label("Pinned", systemImage: "pin.fill")
-                            .labelStyle(.titleAndIcon)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(platformTone.accent)
-                    }
+    private var topRow: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(clip.title)
+                .cosmoDisplayFont(clip.title, size: 16, weight: .semibold)
+                .foregroundStyle(CosmoTheme.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(alignment: .top, spacing: 5) {
+                compactBadge(
+                    scoreOrTimestampLabel,
+                    foreground: searchResult?.source == .semantic ? tone.accent : CosmoTheme.textTertiary,
+                    background: searchResult == nil ? CosmoTheme.inputFill : tone.accentMuted.opacity(0.32),
+                    isMonospaced: searchResult == nil
+                )
+
+                compactBadge(
+                    statusLabel.uppercased(),
+                    foreground: CosmoTheme.statusColor(for: clip.status),
+                    background: CosmoTheme.inputFill
+                )
+
+                if clip.isPinned {
+                    compactBadge(
+                        "PINNED",
+                        foreground: platformTone.accent,
+                        background: platformTone.accentMuted.opacity(0.32)
+                    )
                 }
 
-                Text(clip.title)
-                    .cosmoDisplayFont(clip.title, size: variant == .signal ? 20 : 22, weight: .semibold)
-                    .foregroundStyle(CosmoTheme.textPrimary)
-                    .lineLimit(variant == .signal ? 2 : 3)
-            }
-
-            Spacer(minLength: 8)
-
-            VStack(alignment: .trailing, spacing: 6) {
-                if let searchResult {
-                    Text(searchResult.source == .semantic ? "AI \(Int(searchResult.score * 100))%" : "Fallback \(Int(searchResult.score * 100))%")
-                        .cosmoUIFont(searchResult.source == .semantic ? "AI" : "Fallback", size: 11, weight: .bold, design: .rounded)
-                        .foregroundStyle(searchResult.source == .semantic ? tone.accent : platformTone.accent)
-                } else {
-                    Text(clip.capturedAt.formatted(date: .abbreviated, time: .shortened))
-                        .cosmoMonoFont(size: 11, weight: .semibold)
-                        .foregroundStyle(CosmoTheme.textTertiary)
+                ForEach(actions) { action in
+                    AdaptiveClipActionButton(action: action)
                 }
-
-                Text(statusLabel.uppercased())
-                    .cosmoUIFont(statusLabel.uppercased(), size: 10, weight: .bold, design: .rounded)
-                    .foregroundStyle(CosmoTheme.statusColor(for: clip.status))
             }
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(2)
         }
     }
 
     @ViewBuilder
     private var summaryBlock: some View {
-        let summary = (searchResult?.matchedSnippet.isEmpty == false)
-            ? (searchResult?.matchedSnippet ?? "")
-            : (clip.aiSummary.isEmpty ? clip.excerpt : clip.aiSummary)
         switch variant {
         case .article:
-            Text(summary)
-                .cosmoTextFont(summary, size: 14)
+            Text(summaryText)
+                .cosmoTextFont(summaryText, size: 12)
                 .foregroundStyle(CosmoTheme.textSecondary)
-                .lineLimit(3)
+                .lineLimit(1)
         case .video:
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Image(systemName: "play.rectangle.fill")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(platformTone.accent)
-                    .padding(.top, 3)
-                Text(summary)
-                    .cosmoTextFont(summary, size: 14)
+                Text(summaryText)
+                    .cosmoTextFont(summaryText, size: 12)
                     .foregroundStyle(CosmoTheme.textSecondary)
-                    .lineLimit(2)
+                    .lineLimit(1)
             }
         case .signal:
-            Text(summary)
-                .cosmoTextFont(summary, size: 13)
+            Text(summaryText)
+                .cosmoTextFont(summaryText, size: 11)
+                .foregroundStyle(CosmoTheme.textSecondary)
+                .lineLimit(1)
+        case .clipboard:
+            Text(summaryText)
+                .cosmoTextFont(summaryText, size: 12)
                 .foregroundStyle(CosmoTheme.textSecondary)
                 .lineLimit(2)
-        case .clipboard:
-            Text(summary)
-                .cosmoTextFont(summary, size: 14)
-                .foregroundStyle(CosmoTheme.textSecondary)
-                .lineLimit(4)
-                .padding(.vertical, 2)
         }
     }
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                infoPill(text: clip.domain, tone: platformTone, emphasized: true)
-                if !clip.spaceName.isEmpty {
-                    infoPill(text: clip.spaceName, tone: tone)
-                }
-                if !clip.category.isEmpty {
-                    infoPill(text: clip.category, tone: platformTone)
-                }
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            infoPill(text: clip.domain, tone: platformTone, emphasized: true)
+                .fixedSize(horizontal: true, vertical: false)
+
+            if !clip.spaceName.isEmpty {
+                infoPill(text: clip.spaceName, tone: tone)
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
-            if let searchResult, !searchResult.matchedFields.isEmpty {
-                Text(searchResult.matchedFields.prefix(4).map(\.label).joined(separator: " · "))
-                    .cosmoUIFont("matched", size: 11, weight: .semibold)
-                    .foregroundStyle(tone.accent)
+            if !clip.category.isEmpty {
+                infoPill(text: clip.category, tone: platformTone)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+
+            if let trailingDetailText {
+                Text(trailingDetailText)
+                    .cosmoUIFont(trailingDetailText, size: 10, weight: .semibold)
+                    .foregroundStyle(searchResult == nil ? CosmoTheme.textTertiary : tone.accent)
                     .lineLimit(1)
-            } else if !clip.tags.isEmpty {
-                Text(clip.tags.prefix(4).joined(separator: " · "))
-                    .cosmoUIFont(clip.tags.joined(separator: " "), size: 11, weight: .semibold)
-                    .foregroundStyle(CosmoTheme.textTertiary)
-                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Spacer(minLength: 0)
             }
         }
     }
 
     private func infoPill(text: String, tone: SpaceTone, emphasized: Bool = false) -> some View {
         Text(text)
-            .cosmoUIFont(text, size: 11, weight: .semibold)
+            .cosmoUIFont(text, size: 10, weight: .semibold)
             .foregroundStyle(emphasized ? tone.ribbon : CosmoTheme.textSecondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
             .background(
                 Rectangle()
                     .fill(emphasized ? tone.accentMuted.opacity(0.56) : CosmoTheme.inputFill)
             )
+    }
+
+    private func compactBadge(
+        _ text: String,
+        foreground: Color,
+        background: Color,
+        isMonospaced: Bool = false
+    ) -> some View {
+        Group {
+            if isMonospaced {
+                Text(text)
+                    .cosmoMonoFont(size: 10, weight: .semibold)
+            } else {
+                Text(text)
+                    .cosmoUIFont(text, size: 10, weight: .bold, design: .rounded)
+            }
+        }
+        .foregroundStyle(foreground)
+        .lineLimit(1)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(
+            Rectangle()
+                .fill(background)
+        )
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
@@ -1202,9 +1238,9 @@ private struct AdaptiveClipActionButton: View {
     var body: some View {
         Button(action: action.action) {
             Image(systemName: action.systemImage)
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(action.tint)
-                .frame(width: 28, height: 28)
+                .frame(width: 22, height: 22)
                 .background(
                     Rectangle()
                         .fill(action.tint.opacity(0.12))
@@ -1232,27 +1268,36 @@ private struct AdaptiveClipIconBadge: View {
     }
 
     var body: some View {
-        Rectangle()
-            .fill(tone.accentMuted.opacity(0.70))
-            .frame(width: 56, height: 56)
-            .overlay {
-                Group {
-                    if let image = model.image {
-                        Image(nsImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .padding(9)
-                    } else {
-                        Image(systemName: fallbackIcon)
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(tone.ribbon)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(clip.platformBucket.title)
+                .cosmoUIFont(clip.platformBucket.title, size: 9, weight: .bold, design: .rounded)
+                .foregroundStyle(tone.ribbon)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(width: 54, alignment: .leading)
+
+            Rectangle()
+                .fill(tone.accentMuted.opacity(0.70))
+                .frame(width: 38, height: 38)
+                .overlay {
+                    Group {
+                        if let image = model.image {
+                            Image(nsImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .padding(6)
+                        } else {
+                            Image(systemName: fallbackIcon)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(tone.ribbon)
+                        }
                     }
+                    .clipShape(Rectangle())
                 }
-                .clipShape(Rectangle())
-            }
-            .task(id: clip.url) {
-                await model.loadIfNeeded()
-            }
+        }
+        .task(id: clip.url) {
+            await model.loadIfNeeded()
+        }
     }
 
     private var fallbackIcon: String {
